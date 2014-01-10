@@ -1,0 +1,27 @@
+;;;;;;;;;;;;
+
+FR
+?Particle stack? [stack]
+
+FR
+?Document file with shifts? [shifts]
+
+;;;;;;;;;;;;
+
+
+UD N [tot]
+[shifts]
+
+do lb1 [part]=1,[tot]
+
+	UD IC [part] [bl1] [bl2] [sx] [sy]
+	[shifts]
+
+	SH F
+	[stack]@{****[part]}
+	[stack]_shifted@{*****[part]}
+	[sx],[sy]
+
+lb1
+
+en d

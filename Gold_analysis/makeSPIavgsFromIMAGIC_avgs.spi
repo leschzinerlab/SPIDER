@@ -1,0 +1,225 @@
+;cat mra8.plt | gawk '{printf ("%5d   %1d    %-6.6f     %-6.6f     %-6.6f \n",NR,3,$2,$3,$4)}' >> rotAngles.spi
+
+;;;;;;;Shift, rotate & generate averages for particles using IMAGIC output;;;;;;
+
+FR
+?Input rotation & shift file from IMAGIC? <rot>
+
+FR
+?Input select file basename? <membership>
+
+RR [numAvgs]
+?Number of averages?
+
+RR [boxSize]
+?Box size?
+
+FR
+?Input ef, norm particle stack? <stackEF>
+
+FR
+?Input en, norm particle stack? <stackEN>
+
+FR
+?Input ef, thresholded particle stack? <stackEFth>
+
+FR
+?Input en, thresholded particle stack? <stackENth>
+
+FR
+?Output folder? <output>
+
+;;;;;;;;;;;;;;;
+
+UD N [numParts]
+<rot>
+
+VM
+mkdir <output>
+
+[numClasses]=0
+
+[one]=1 	;a useful one
+
+;;Shift & rotate particles
+
+do lb1 [part]=1,[numParts]
+	
+	UD IC [part] [MRApsi] [SHX] [SHY]
+	<rot>
+
+	SH F
+	<stackEF>@{*****[part]}
+	<output>/ef_shifted@{*****[part]}
+	[SHY],[SHX]
+
+	RT SQ
+	<output>/ef_shifted@{*****[part]}
+	<output>/ef_shiftedRot@{*****[part]}
+	-[MRApsi],1
+
+	SH F
+	<stackEN>@{*****[part]}
+	<output>/en_shifted@{*****[part]}
+	[SHY],[SHX]
+	
+	RT SQ
+	<output>/en_shifted@{*****[part]}
+	<output>/en_shiftedRot@{*****[part]}	
+	-[MRApsi],1
+
+	SH F
+	<stackEFth>@{*****[part]}
+	<output>/efTH_shifted@{*****[part]}
+	[SHY],[SHX]
+
+	RT SQ
+	<output>/efTH_shifted@{*****[part]}
+	<output>/efTH_shiftedRot@{*****[part]}
+	-[MRApsi],1
+
+	SH F
+	<stackENth>@{*****[part]}
+	<output>/enTH_shifted@{*****[part]}
+	[SHY],[SHX]
+
+	RT SQ
+	<output>/enTH_shifted@{*****[part]}
+	<output>/enTH_shiftedRot@{*****[part]}
+	-[MRApsi],1
+
+lb1 
+
+BL
+blank
+[boxSize],[boxSize]
+N
+(0)
+
+UD ICE
+<rot>
+
+;Generate class averages
+
+do lb99 [avg]=1,[numAvgs]
+	
+	UD N [partsPerClass]
+	<membership>_{****[avg]}
+
+	IF([partsPerClass].EQ.0) GOTO LB10
+	
+	IF([partsPerClass].GT.1) GOTO LB3 
+	
+	UD IC [one] [singlePartSel]
+	<membership>_{****[avg]}
+
+	CP
+	<output>/ef_shiftedRot@{*****[singlePartSel]}
+	_9
+
+	MR
+	_9
+	<output>/ef_avgs@{*****[avg]}
+	X
+
+	CP
+	<output>/efTH_shiftedRot@{*****[singlePartSel]}
+	_9
+
+	MR
+	_9
+	<output>/efTH_avgs@{*****[avg]}
+	X
+	
+	CP
+	<output>/enTH_shiftedRot@{*****[singlePartSel]}
+	_9
+
+	MR
+	_9
+	<output>/enTH_avgs@{*****[avg]}
+	X
+
+	CP
+	<output>/en_shiftedRot@{*****[singlePartSel]}
+	_9
+
+	MR
+	_9
+	<output>/en_avgs@{*****[avg]}
+	X
+
+	UD ICE
+	<membership>_{****[avg]}
+
+	GOTO LB99
+
+	LB3
+	
+	AD S
+	<output>/efTH_shiftedRot@*******
+	<membership>_{****[avg]}
+	_9
+	
+
+	MR
+	_9 
+	<output>/efTH_avgs@{*****[avg]}
+	X
+
+	AD S
+	<output>/enTH_shiftedRot@*******
+	<membership>_{****[avg]}
+	_9
+	
+
+	MR
+	_9 
+	<output>/enTH_avgs@{*****[avg]}
+	X
+
+	AS R	
+	<output>/ef_shiftedRot@*******
+	<membership>_{****[avg]}
+	A
+	_9
+	_8
+
+	MR
+	_9 
+	<output>/ef_avgs@{*****[avg]}
+	X
+	
+	MR
+	_8
+	<output>/ef_var@{*****[avg]}
+
+	AS R	
+	<output>/en_shiftedRot@*******
+	<membership>_{****[avg]}
+	A
+	_9
+	_8
+
+	MR
+	_9 
+	<output>/en_avgs@{*****[avg]}
+	X
+	
+	MR
+	_8
+	<output>/en_var@{*****[avg]}
+
+	GOTO lb99
+
+	lb10
+
+	CP
+	blank
+	<output>/avg@{*****[avg]}
+	
+
+lb99
+
+
+en d

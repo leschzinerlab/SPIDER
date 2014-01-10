@@ -1,0 +1,48 @@
+;;;;;
+
+FR
+?Input volume? [vol]
+
+RR [angStep]
+?Angular step?
+
+RR [boxSize]
+?Box size?
+
+;;;;;
+
+;b11.pjq
+[radius]=ABS(([boxSize]/2)-([boxSize]*0.1))  ; radius
+
+vm
+mkdir prj_[vol]
+
+
+vo ea,[numSel]
+[angStep]         ; delta theta
+0,90.0
+0,359.9
+prj_[vol]/refangles1
+
+DOC CREATE
+prj_[vol]/select1
+1
+1-[numSel]
+
+ms
+_1@
+[boxSize],[boxSize],1
+[numSel]
+
+pj 3q
+[vol]		;reference_volume
+[radius]
+prj_[vol]/select1
+prj_[vol]/refangles1
+_1@****
+
+cp
+_1@
+prj_[vol]/prj@
+
+en d

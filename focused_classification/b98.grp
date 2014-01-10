@@ -1,0 +1,126 @@
+;b98.grp
+
+;To run:  spidermp grp/spi @b98 &
+
+;creates a set of selection files, 1 per ref view, after AP MD
+;calculates avg views and corresp. variance maps
+
+;This is accompanied by p_rotate.grp, p_average.grp, and shift_particles.grp
+
+;You can add a cutoff to the cross-correlation with the VOMQ command so that you select particles that are above a certain threshold.  
+;To determine the threshold, in gnuplot plot the apmq file using 1:4 w l to get a sense for the average.
+
+;;;;;;;;;;;;;;;;;;;;
+
+FR 
+?Unshifted particles? <unshifted>
+
+FR
+?Shifts output from SPIDER refinement? <shifts>
+
+FR
+?Input apmq file from SPIDER refinement? <apmq>
+
+FR 
+?Output folder name? <output>
+
+RR x21
+?Angular step used for this round of refinement?
+
+RR x50
+?Box size?
+
+RR x41
+?Do you want to use a cross-correlation value cutoff for the particles(yes=1 no=0)?
+
+	IF(x41.EQ.1) THEN
+
+		RR x89
+		?Input value for cross-correlation cutoff?
+
+	ENDIF
+
+	IF(x41.EQ.0) THEN
+
+		x89=0
+
+	ENDIF
+LB69
+
+;;;;;;;;;;;;;;;;;;;;;;;
+
+
+MD
+VB OFF
+
+MD 
+SET MP
+(0)
+
+VO EA x20
+x21
+0, 90
+0, 359.9
+tmp
+
+VM
+mkdir <output>
+
+@shift_particles
+<unshifted>
+<shifts>
+
+VM
+mkdir <output>/ali
+
+VM
+mkdir <output>/avg
+
+@p_rotate
+<apmq>
+<unshifted>_shifted@*******
+<output>/ali/rot@*****
+
+VO MQ
+x89
+<apmq>
+x20
+<output>/sel***
+<output>/how_many
+
+ms
+_1@
+x50,x50,1
+x20
+
+ms
+_2@
+x50,x50,1
+x20
+
+cp
+_1@
+<output>/avg/avg@
+
+cp
+_2@
+<output>/avg/var@
+
+de
+_1@
+
+de
+_2@
+
+de 
+tmp
+
+@p_average_nf [x20]
+<output>/how_many
+<output>/sel***
+<output>/ali/rot@*****
+<output>/avg/avg@***
+<output>/avg/var@***
+<output>/ali/grp
+
+en 

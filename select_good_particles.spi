@@ -1,0 +1,42 @@
+;This batch will take a select file and extract the good particles from a stack
+
+FR 
+?Input stack? <stack>
+
+FR
+?Input select file? <select>
+
+RR x20
+?Box size?
+
+MD 
+SET MP
+(0)
+
+UD N x99
+<select>
+
+MS
+_1@
+x20 x20 1
+x99
+
+do lb1 x30=1,x99
+
+	UD IC x30 x41
+	<select>
+
+	CP 
+	<stack>@{*****x41}
+	_1@{*****x30}
+
+lb1
+
+UD ICE 
+<select>
+
+CP 
+_1@
+good_<stack>@
+
+en d

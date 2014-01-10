@@ -1,0 +1,65 @@
+;;;;;;
+
+FR
+?Input 3D variance file? <variance>
+
+RR [boxSize]
+?Input boxsize?
+
+;;;;;;
+
+pk 3d
+<variance>
++
+20,1
+n
+1,1,1
+1
+n
+3dvar_pk
+
+do lb1 x10=1,20
+
+	ud x10,x11,x12,x13,x14,x15,x16
+	3dvar_pk
+	
+	mo 3
+	sp{**x10}
+	([boxSize],[boxSize],[boxSize])
+	sp
+	n
+	(1.0)
+	(10,0)
+	X14,x15,x16
+	(0,0,0)
+
+lb1
+
+bl
+sum_sp
+[boxSize],[boxSize],[boxSize]
+n
+0.0
+
+do lb2 x10=1,5
+
+	ad
+	sum_sp
+	sp{**x10}
+	sum_sp
+	*
+
+lb2
+
+;
+;ad
+;sp03
+;sp10
+;sum1
+;sp18
+;sp27
+;sp30
+;*
+;
+
+en d

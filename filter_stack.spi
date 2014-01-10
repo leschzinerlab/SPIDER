@@ -1,0 +1,69 @@
+;  procedure to mask a stack of images  ;;;;;;;;;;;;;;;;;;;;;;;;
+
+;x15 = 125	; dimensions of images in stack
+
+;x20 = 16350      ; number of particles in stack
+
+;x25 = (0.9)	; mask radius for circular mask
+
+;x30 = x25*x15/2		; radius of cicular mask
+
+;x31 = (x15/2)+1		; image center
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+FR
+?INPUT STACK?<stack>
+
+RR x20
+?INPUT NUMBER OF PARTICLES?
+
+RR x60
+?INPUT ANG PER PIXEL?
+
+;RR x61
+;?INPUT HIGH-PASS PASS BAND?
+
+;RR x62
+;?INPUT HIGH-PASS STOP BAND?
+
+RR x63
+?INPUT LOW-PASS PASS BAND?
+
+RR x64
+?INPUT LOW-PASS STOP BAND?
+
+MD
+SET MP
+(2)
+
+;x41 = x60/x61
+;x42 = x60/x62
+x43 = x60/x63
+x44 = x60/x64
+
+DO LB1 x50 = 1,x20
+
+FQ
+<stack>@{*****x50}
+<stack>_fq_{***x63}_{***x64}@{*****x50}
+(7)
+(x43 x44)
+
+
+LB1
+
+;DO LB2 x50 = 1,x20
+
+;FQ
+;<stack>_fq_{***x63}_{***x64}@{*****x50}
+;<stack>_fq_{***x63}_{***x64}_fq_{***x61}_{***x62}@{*****x50}
+;(8)
+;(x41 x42)
+
+;LB2
+
+;DE
+;<stack>_fq_{***x61}_{***x62}
+
+EN D

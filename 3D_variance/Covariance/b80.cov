@@ -1,0 +1,74 @@
+;-------------------------b80.cov--------------------------
+; Calculates the covariance from the bootstrap volumes
+md
+set mp
+4
+
+;Number of bootstrap volumes created by VA 3Q
+X40=500
+
+VM
+mkdir COVAR
+
+do lb5 x21=1,X40
+	AR
+	TOTAL/vol{*****x21}
+	tmp{****X21}
+	P1*10000
+lb5
+
+;Filter to the resolution of the reconstruction (??)
+do lb1 x21=1,X40
+	FQ NP
+	tmp{****X21} 
+	_1
+	(7)
+	(0.09,0.14)
+	
+	CP
+	_1
+	tmp{****X21}                 
+
+lb1
+
+; calculate variance maps for the volumes *10000 and filtered
+
+
+VA 3C
+tmp****              ;Vdl06/vfl@****
+(1-X40)
+45,26,37		; Coordinates of point investigated
+COVAR/CAVG1	; Average file
+COVAR/CVAR1	; Variance file
+COVAR/CCOR1	; correlation
+
+VA 3C
+tmp****              ;Vdl06/vfl@****
+(1-X40)
+47,37,40		; Coordinates of point investigated
+COVAR/CAVG2	; Average file
+COVAR/CVAR2	; Variance file
+COVAR/CCOR2	; correlation
+
+VA 3C
+tmp****              ;Vdl06/vfl@****
+(1-X40)
+56,25,49		; Coordinates of point investigated
+COVAR/CAVG3	; Average file
+COVAR/CVAR3	; Variance file
+COVAR/CCOR3 	; correlation
+
+VA 3C
+tmp****              ;Vdl06/vfl@****
+(1-X40)
+51,27,37		; Coordinates of point investigated
+COVAR/CAVG4	; Average file
+COVAR/CVAR4	; Variance file
+COVAR/CCOR4	; correlation
+
+
+VM
+rm tmp*.spi
+
+EN D
+------------------------------------------------------

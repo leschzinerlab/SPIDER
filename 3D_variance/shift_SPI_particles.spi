@@ -1,0 +1,38 @@
+;This batch will shift a particle stack that was put into a SPIDER refinement
+
+;SPIDER parameter file is a SPIDER file output from a spider refinement
+
+;;;;;;;;;;
+
+FR
+?UNSHIFTED INPUT? <stack>
+
+FR
+?SPIDER PARAMETER FILE? <shifts>
+
+;;;;;;;;;;;
+
+MD
+SET MP
+4
+
+UD N x99
+<shifts>
+
+DO LB1 x50=1,x99
+
+	UD IC x50,x14,x15
+	<shifts>
+	
+	SH F
+	<stack>@{*****x50}
+	<stack>_shifted@{*****x50}
+	-x14,-x15
+
+LB1
+
+UD ICE
+<shifts>
+
+en d
+

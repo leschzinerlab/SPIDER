@@ -1,0 +1,26 @@
+;---------------------b91.var-----------------------
+; Calculates the bootstrap volumes from particles
+; selection file and angle file
+MD
+VB OFF
+
+MD
+SET MP
+1
+
+VM
+mkdir TOTAL
+
+UD N,X51                       ;   number of projections
+ref1/angular_file_002
+
+VA 3Q                           ; NN with replacements
+stack_man_dc4_CTF_flip_norm_sel2_shifted@*****   ;  original data * bin CTF, centered
+ref1/select002
+ref1/angular_file_002
+*
+500                       ;  Create 500 volumes     
+TOTAL/vol*****
+1			; first volume #
+
+EN D

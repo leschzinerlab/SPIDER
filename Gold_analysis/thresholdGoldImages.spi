@@ -1,0 +1,30 @@
+;;;;;;
+
+FR
+?Input stack? <stack> 
+
+RR [numParts]
+?Number of particles? 
+
+RR [thresh]
+?Number of std deviation below which pixels will be set to zero?
+
+;;;;;
+
+do lb1 [part]=1,[numParts]
+
+	FS [max] [min] [avg] [std]
+	<stack>@{******[part]}
+	
+	[thr]=[thresh]*[std]
+	
+	TH M
+	<stack>@{*****[part]}
+	<stack>_thresh@{*****[part]}
+	B
+	[thr]
+	
+
+lb1
+
+en d

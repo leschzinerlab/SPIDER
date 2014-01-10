@@ -1,0 +1,74 @@
+[x20]
+
+fr
+?counter file?
+;<1> sel/how_many
+fr
+?selection file?
+;<2> sel/sel***
+fr
+?Rotated particles?
+;<3> ali/sar****
+fr
+?Name of output average?
+;<4> avg/avg***
+fr
+?Name of output variance?
+;<5> avg/var***
+fr
+?Name of output projection group?
+;<6> ali/grp***
+
+x91=0
+
+do lb1 i=1,x20
+x55=x0
+ud ic,x55,x71
+<1>
+if(x71.eq.0) goto lb10
+if(x71.gt.1) goto lb3
+ud ic,1,x66
+<2>x55
+cp
+<3>x66
+<4>x55
+cp
+<3>x66
+<6>x55@{****x71}
+ud ice
+<2>x55
+x91=x91+1
+goto lb10
+lb3
+
+do lb6 x15=1,x71
+ud ic,x15,x16
+<2>x55
+
+;fq np
+;<3>x16
+;_3
+;(7)
+;(0.2,0.3)
+
+cp
+<3>x16
+<6>{***x55}@{****x15}
+
+;de
+;_3
+
+lb6
+ud ice
+<2>x55
+as r
+<3>
+<2>x55
+A
+<4>x55
+<5>x55
+
+x91=x91+1
+lb10
+lb1
+re

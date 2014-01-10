@@ -1,0 +1,49 @@
+; This batch will window down a stack from a larger box size to a smaller box size.
+
+;;;;;;;;;;;;;;;;;
+
+FR
+?Input stack? <stack>
+
+RR x89
+?Number of particles?
+
+RR x99
+?Original box size?
+
+RR x98
+?New box size?
+
+;;;;;;;;;;;;;;;;;;
+
+MD
+SET MP
+(0)
+
+;Make output stack
+MS
+_1@
+x98 x98 1
+x89
+
+;Calculate new left corner
+
+x88=(x99-x98)/2
+
+;loop over all particles
+
+do lb1 x20=1,x89
+
+	WI
+	<stack>@{*****x20}
+	_1@{*****x20}
+	x98 x98 1
+	x88 x88
+
+lb1 
+
+cp 
+_1@
+<stack>_wi_{***x98}@
+
+en d

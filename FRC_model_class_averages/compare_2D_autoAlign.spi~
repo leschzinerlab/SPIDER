@@ -1,0 +1,661 @@
+;;;;;;;
+
+FR
+?Input text file with model names? <file>
+
+FR
+?Model basename? <modBase>
+
+FR
+?Input shifted, rotated particle stack? <stack>
+
+FR
+?Input select file basename for reference-free averages? <sel>
+
+RR [numAvgs]
+?Number of 2D reference-free averages? 
+
+RR [boxSize]
+?Box size?
+
+RR [pixSize]
+?Pixel size?
+
+FR
+?Output folder? <output>
+
+;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;INPUT INFO;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;----->Select filename expected format:
+;					<basename>_0000.spi
+
+;----->If particles are coming from IMAGIC, shift particles using EQ-ROT command, then convert to spider
+
+;----->Model text file expected to contain names of volumes listed in order of refinement and resolution of each refinement
+;		eg:    
+;			1	2	01	44
+;			2	2	02	33
+;			3	2	03	31
+; That will be filled into the basename
+
+;----->To make text file, run 'make_model_file.py'
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+VM						;Make output directory
+mkdir <output>
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;:Generate 2D classums & calculate resolution;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+SD IC NEW
+incore_FRC
+1,[numAvgs]
+
+MS 
+_1@
+[boxSize] [boxSize] 1
+[numAvgs]
+
+;useful variables
+[pt8]=0.8
+[1pt2]=1.2
+[search]=([boxSize]/2)+1
+
+do lb2 [avg]=1,[numAvgs]
+
+	AS R					;calculate average for comparison
+	<stack>@*******
+	<sel>_{****[avg]}
+	(A)
+	_1@{*****[avg]}
+	<output>/class{****[avg]}_var
+
+	DOC SPLIT
+	<sel>_{****[avg]}
+	<output>/<sel>_{****[avg]}_even
+	<output>/<sel>_{****[avg]}_odd
+
+	AS R					;calculate resolution of classum: separate even
+	<stack>@*******
+	<output>/<sel>_{****[avg]}_even
+	(A)
+	<output>/class{****[avg]}_avgE
+	<output>/class{****[avg]}_varE
+
+	AS R					;calculate resolution of classum: separate odd
+	<stack>@*******
+	<output>/<sel>_{****[avg]}_odd
+	(A)
+	<output>/class{****[avg]}_avgO
+	<output>/class{****[avg]}_varO
+
+	RF					;calculate resolution
+	<output>/class{****[avg]}_avgO
+	<output>/class{****[avg]}_avgE
+	(1)
+	[pt8],[1pt2]
+	<output>/class{****[avg]}_avgDoc
+
+	do lb3 [fsc]=2,[search]			;loop over doc file to find FSC=0.5
+	
+		UD IC [fsc] [radius] [DPH] [FRC] [FRCCRIT] [PIX]
+		<output>/class{****[avg]}_avgDoc
+
+		IF([FRC].GT.(0.5)) THEN GOTO lb3
+		
+		IF([FRC].LT.(0.5)) THEN
+
+			[fsc]=[fsc]-1
+			
+			GOTO LB99			
+		ENDIF
+
+	lb3
+	
+	UD ICE
+	<output>/class{****[avg]}_avgDoc
+
+	lb99
+	
+	UD IC [fsc] [radius] [DPH] [FRC] [FRCCRIT] [PIX]
+	<output>/class{****[avg]}_avgDoc
+	
+	[res]=[pixSize]/[radius]
+
+	SD IC [avg] [res]
+	incore_FRC
+
+	UD ICE
+	<output>/class{****[avg]}_avgDoc
+	
+	DE					;delete extraneous files
+	<output>/class{****[avg]}_avgDoc
+	DE
+	<output>/<sel>_{****[avg]}_odd
+	DE
+	<output>/<sel>_{****[avg]}_even
+	VM
+	rm <output>/class????_var*
+	VM
+	rm <output>/class????_avgO*
+	VM
+	rm <output>/class????_avgE*
+
+lb2
+
+UD ICE
+<output>/class{****[avg]}_avgDoc
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;Outputs;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+SD IC COPY
+incore_FRC
+<output>/FRC_classum_SELF			;output docfile with resolution (in angstroms) @ FRC = 0.5
+
+CP
+_1@
+<output>/classums@				;stack of avgs
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;:Compare models to averages & calculate FRC;;;;;;;;;;
+;;;;;;;;;;;between models & avgs;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+UD N [numModels]
+<file>
+
+SD IC NEW
+incore_avgFRC
+2,[numModels]
+
+do lb50 [model]=1,[numModels]
+
+	UD IC [model] [num] [modResolution]
+	<file>
+
+	;Set variables:
+	
+	[radius]=[boxSize]/2
+	[imageCenter]=(INT([boxSize]/2)+1)
+	[allowedShift]=0.15*[boxSize]
+	[thetaMin]=0
+	[thetaMax]=90
+	[psiMin]=0
+	[psiMax]=359.9
+	[angStep]=8
+	
+	;;;;;;;;;;;;;;;;;SET ANGULAR STEP HERE!!;;;;;;;;;;;;;;;;;
+	
+	VO EA [numAngles]		; generate angular file
+	([angStep])
+	([thetaMin],[thetaMax])
+	([psiMin],[psiMax])
+	<output>/angles
+	
+	;;;;;;;;;;;;;;;;;;;;;;;Projection matching;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	
+	;;;;;;;;;;;;;;;;;Create projections of the model;;;;;;;;;;;;
+		
+	PJ 3Q				; project ref according to angular file
+	<modBase>{***[num]}	; proj last reference
+	([boxSize]/2)
+	(1-[numAngles])
+	<output>/angles
+	<output>/proj@*****
+		
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+		
+		
+	;;;;;;;;;;;;;;;;;Compare particles to projections of the model;;;;;;;;;;;;;;;;;;
+		
+	AP SH				; HUGE function.  Is the heart of proj matching.  Compares parts to ref
+	<output>/proj@*****
+	(1-[numAngles])
+	([boxSize]*0.0625,2)		; allow shift up to ~1/20 box size at one pixel intervals (can edit this!)
+	(1,[boxSize]*0.3,1,1)		; allow rings from center to 90% of box to be used for rotational alignment
+	<output>/angles	; angles of the reprojections
+	<output>/classums@******			; particles to be matched
+	(1-[numAvgs])			; number of particles
+	*				; can include previous alignment params here to limit search
+	(0.0,0.0)			; amount to restrict
+	(1)				; check mirrors
+	<output>/apsh_<modBase>{***[num]}	; AP SH output text file with all alignment info
+		
+		
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                                			;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    Calculate & apply shifts to particles     	;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    for back projection                		;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	
+		;cross correlation will be used to center the particles relative to the projected reference.
+		;Based on the cross correlation, the shifts for each particle will be calculated
+		;and can then be applied prior to back projection
+		
+							; [avgCC] - average correlation coefficient. 
+		[avgCC]=0.0                        	;This is set to zero, but will be added to at the end of the master loop
+		
+		
+	;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;        Step 1:  Prepare reference projection & particle
+	;;;;;;;;;;;;;;;;
+	
+		
+	DO LB5 [particle]=1,[numAvgs]           
+		
+		UD IC [particle],[psi],[theta],[phi],[matchedProj],[expNum],[cumPsi],[cumX],[cumY],[numSearched],[angChange],[CC],[curPsi],[curX],[curY],[Mir]   
+		<output>/apsh_<modBase>{***[num]}
+		
+		[curPsi]=-[curPsi]                    		;Since the rotangle is calculated for the particle, its sign
+									;must be inverted to properly rotate the reference proj.
+			
+		;When particles best align to a mirrored projection of a reference, it is indicated by a negative value in front of
+		;the ref proj number. When [Mir] is negative, the particle was best aligned to the mirrored reference.
+			
+		IF([Mir].GT.0) GOTO LB61                	;see previous comment
+			
+									; The following steps are applied to the mirrored references.  It should be noted that mirroring is equivalent
+									;to a rotation greater than 90
+				
+			MR                            			;mirror image command
+			<output>/proj@{*****[matchedProj]}        ;selects input reference projection
+			_3                            			;temporary output image
+			Y                            			;mirrors across Y axis
+				
+			;now that the reference projection has been mirrored appropriately, it will be rotated to be aligned to the
+			;particles.  Note that it is not shifting the reference, only rotating it.
+				
+			RT SQ                            		;rotate and shift image       
+			_3                            			;temporary output from the mirroring command previous
+			_2                            			;output – rotated reference projection
+			[curPsi]                        		;rotation angle
+			(0,0)                            		;no shifting!
+				
+			goto LB62
+	
+		LB61
+		;for particles that did not align to the mirrored reference, the reference is simply rotated (like above)
+			
+		RT SQ                            		;rotate and shift image
+		<output>/proj@{*****[matchedProj]}        	;input reference projection
+		_2                            			;output – rotated reference projection
+		[curPsi]                        		;rotation angle
+		(0,0)                            		;no shifting!
+		
+			
+		LB62
+			
+		;Now we have the reference projection correctly rotated and mirrored (if necessary) and we will prepare it for
+		;alignment to the particle
+			
+		MA                                		;mask image
+		_2                                		;reference projection
+		_3                                		;output – masked reference projection
+		[radius]                            		;radius of mask
+		D                                		;shape of mask:  D=disc
+		E                                		;choice of mask pixels: E=externally determined
+		(0)                                		;value for mask pixels, the “externally determined” value
+		[imageCenter],[imageCenter]                	;center coordinates for mask
+			
+		;The masked reference projection will now be padded with extra pixels, making it twice the box size
+			
+		PD                                		;pad image
+		_3                                		;input – masked reference projection
+		_2                                		;output – padded, masked, reference projection
+		([boxSize]*2),([boxSize]*2)                    	;dimensions of padding
+		N                                		;Average?  Ans: N – no.  Value will be inputted below
+		(0.000E+00)                            		;value of padded pixels
+		(1,1)                                		;top left coordinates:  not sure why the image is placed in the top
+									;left corner instead of the middle of the padded image
+			
+		;The unfiltered particle will also be padded before alignment to reference
+		
+		CP                                		;copy image
+		<stack>@{******[particle]}                    	;retrieve particle from stack
+		_3                                		;output – unfiltered particle from stack
+		
+		PD                                		;pad image
+		_3                                		;input – unfiltered particle from stack
+		_1                                		;output – padded unfiltered particle from stack
+		([boxSize]*2),([boxSize]*2)                  	;dimensions of padding
+		B                                		;B(order) – background value will be equal to avg. pixel value
+		(1,1)                                		;top left corner coordinates:  still not sure about it.
+		
+		;;;;;;;;;;;;;;;;;;
+		;;;;;;;;;;;;;;;;;;
+		;;;;;;;;;;;;;;;;;;    Step 2:  Cross correlate the particle and reference projection
+		;;;;;;;;;;;;;;;;;;
+			
+		CC N                                		;calculate a normalized cross correlation image
+		_1                               		;input – padded unfiltered particle
+		_2                                		;ref input – padded, masked, reference projection
+		_1                                		;output – replaces the input with the cross correlation image
+		
+		;The cross correlation image contains peak(s) corresponding to the X & Y shifts necessary to align the particle to
+		;the reference.  We need to read off this peak with the X&Y coordinates, and the coordinates will be shifts.
+		
+		WI                                		;Window command
+		_1                                		;input – cross correlation output from CC N
+		_2                                		;output – a larger box size
+		(([allowedShift]*2)+1),(([allowedShift]*2)+1)      ;new window size
+		([boxSize]-[allowedShift]+1),([boxSize]-[allowedShift]+1)  ;new top left coordinates
+		
+		;Peak search (PK) is now performed on the windowed cross correlation image so that the X & Y coordinates correspond
+		;to X & Y shifts.
+		
+		PK [PK_X],[PK_Y],[PK_value],[PK_ratio],[PK_coords_X],[PK_coords_Y],[PK_coords_max]
+		_2                                		;input – windowed cross correlation image
+		(0)                                		;number of peaks
+		
+		; In case there was no peak found for translation, the peak value [PK_coords_max] is 0.
+		; In this case get a value at the origin of the CCF and store in in shift document file.
+		; This value is needed for sorting and calculation of the average correlation coeff.
+		
+		IF([PK_coords_max].EQ.0.0) THEN            	;If the value of the max peak equal zero, get the origin pixel
+								;intensity
+			GP [PK_coords_max]                	;get pixel value command
+			_2                            		;input – windowed cross correlation image
+			([allowedShift]+1),([allowedShift]+1)   ;center coordinates
+			
+			;Since there were no peaks found, the particle does not need to be shifted.  Therefore, the unshifted
+			;unfiltered particle is copied into the shifted particle stack
+			
+			CP                            		;copy
+			_3                            		;input – unfiltered particle from stack
+			<output>/parts_shifted_<modBase>{***[num]}@{******[particle]}            ;output – new shifted stack
+			
+		ELSE                                		;for all other particles that need to be shifted
+		
+			SH F                            		;shift image using fourier interpolation (accurate!)
+			_3                            			;input – unfiltered particle from stack
+			<output>/parts_shifted_<modBase>{***[num]}@{******[particle]}        	;output – placement into new shifted particle stack
+			-[PK_coords_X],-[PK_coords_Y]            	;coordinates from PK used to shift the particles.  Note that the
+									;sign is negative (spider convention)
+		
+		ENDIF
+		
+		;The final step is to start a running count of the correlation coefficients.  Initially, the [avgCC] is equal to
+		;zero, but all of the new CC values are added together to get the total sum of cross correlation values.
+		
+		[avgCC]=[avgCC]+[PK_coords_max]
+		
+		;This will output the shift parameters
+		
+		SD [particle],[PK_coords_X],[PK_coords_Y],[PK_coords_max]
+		<output>/shifts_<modBase>{***[num]}
+	
+		UD ICE 
+		<output>/apsh_<modBase>{***[num]}
+		
+	LB5                                    				;end of the loop for each particle
+		
+	;Calculate the average cross correlation coefficient by dividing the total cross correlation value by the number of
+	;particles
+		
+	[avgCC]=[avgCC]/[numAvgs]
+		
+	SD -1,[avgCC]                            			;this saves the [avgCC] value as a comment in the last line
+	<output>/shifts_<modBase>{***[num]}		;of the shifts file using 1 register (column)
+		
+	SD E                                    			;closes the shifts file
+	<output>/shifts_<modBase>{***[num]}
+	
+	; remove inline files
+	DE
+	_1
+		
+	DE
+	_2
+		
+	DE
+	_3
+	
+								;end of loop for each reference
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;; Generate outputs! 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;			;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+		
+	;The outputs from this are going to compare the CC values of each particles for each model, and then will copy the class average followed by 
+	;the best matching model, second best matching, etc. in a row within the stack.  This will be repeated for each particle.
+	
+	;There will also be an output file that has the value of cross correlation of a given particle for each model:
+	
+	;	Particle # 	Model_1_CC	Model_2_CC	(etc.)  		
+	
+	; The final output file will output the corresponding CCs & Euler angles of the best matching views:
+	
+	;	Particle # 	Best_matching_model_CC	Best_matching_model_psi		Best_matching_model_theta	Best_matching_model_phi 	Second_best_etc. etc. etc.
+	
+	
+	SD IC NEW
+	incore_model_1
+	4,[numAvgs]
+	
+	SD IC NEW
+	incore_FRC2
+	2,[numAvgs]
+
+	MS
+	_3@
+	[boxSize] [boxSize] 1 
+	([numAvgs]*2)
+	
+	
+	[count]=1
+	[numm]=1
+	
+	do lb1 [particle]=1,[numAvgs]			;loop over particles
+		
+	
+		UD IC [particle],[shiftX],[shiftY],[CC_Norm1]
+		<output>/shifts_<modBase>{***[num]}
+		
+		UD IC [particle] [psi1] [theta1] [phi1] [matchedProj1] [expNum] [cumPsi] [cumX] [cumY] [numSearched] [angChange] [CC] [curPsi] [curX] [curY] [Mir]
+		<output>/apsh_<modBase>{***[num]}
+	
+		SD IC [particle] [matchedProj1] [curPsi] [theta1] [phi1]
+		incore_model_1
+	
+		RT SQ
+		<output>/classums@{*****[particle]}
+		_1
+		[curPsi],1
+		[curX],[curY]
+		
+		IF([Mir].LT.0)THEN
+				
+			MR
+			_1
+			_2
+			Y
+				
+			CP 
+			_2
+			_1
+			
+		ENDIF
+			
+		[next]=[count]+1
+	
+		CP
+		_1
+		_3@{*****[count]}
+		
+		CP
+		<output>/proj@{*****[matchedProj1]}
+		_3@{*****[next]}
+		
+		RF								;calculate FRC b/w model & classum
+		_1
+		<output>/proj@{*****[matchedProj1]}
+		(1)
+		[pt8],[1pt2]
+		<output>/FRC_<modBase>{***[num]}_{***[count]}
+	
+		do lb7 [fsc]=2,[search]			;loop over doc file to find FSC=0.5
+	
+			UD IC [fsc] [radius] [DPH] [FRC] [FRCCRIT] [PIX]
+			<output>/FRC_<modBase>{***[num]}_{***[count]}
+	
+			IF([FRC].GT.(0.5)) THEN GOTO lb7
+			
+			IF([FRC].LT.(0.5)) THEN
+	
+				[fsc]=[fsc]-1
+				
+				GOTO LB98			
+			ENDIF
+
+		lb7
+	
+		UD ICE
+		<output>/FRC_<modBase>{***[num]}_{***[count]}
+	
+		lb98
+		
+		UD IC [fsc] [radius] [DPH] [FRC] [FRCCRIT] [PIX]
+		<output>/FRC_<modBase>{***[num]}_{***[count]}
+		
+		[res]=[pixSize]/[radius]
+	
+		SD IC [particle] [particle] [res]
+		incore_FRC2
+	
+		UD ICE
+		<output>/FRC_<modBase>{***[num]}_{***[count]}
+
+		[count]=[count]+2
+		
+		DE
+		_1
+		
+		DE
+		_2
+	
+		
+	lb1
+	
+	VM	
+	rm <output>/FRC_<modBase>{***[num]}_???.spi
+
+	UD ICE
+	<output>/shifts_<modBase>{***[num]}
+		
+	UD ICE
+	<output>/apsh_<modBase>{***[num]}
+	
+	SD IC COPY
+	incore_model_1
+	<output>/model_assignment
+	
+	SD IC COPY
+	incore_FRC2
+	<output>/FRC_classums_<modBase>{***[num]}
+
+	SD ICE
+	incore_FRC2
+
+	SD ICE
+	incore_model_1
+
+	CP 
+	_3@
+	<output>/aligned_avgs_<modBase>{***[num]}@
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;:Calculate average FRC resolution ;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	[avgFRC]=0
+
+	do lb88 [mods]=1,[numAvgs]
+
+		UD IC [mods] [blank] [resol]
+		<output>/FRC_classums_<modBase>{***[num]}
+
+		[avgFRC] = [avgFRC]+[resol]
+
+	lb88
+
+
+	UD ICE
+	<output>/FRC_classums_<modBase>{***[num]}
+
+	[avgFRC]=[avgFRC]/[numAvgs]
+
+	SD IC [model] [avgFRC] [modResolution]
+	incore_avgFRC
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;Sort aligned averages;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;based upon FRC;;;;;;;;;;;;;;;;;;;;;;;;
+
+	DOC SORT
+	<output>/FRC_classums_<modBase>{***[num]}
+	<output>/FRC_classums_<modBase>{***[num]}_sort
+	(2)
+	Y
+	
+	[counter]=1
+	
+	do lb78 [test]=1,[numAvgs]
+
+		[test]
+
+		UD IC [test] [selectedMod]
+		<output>/FRC_classums_<modBase>{***[num]}_sort
+
+		[selectedMod]
+
+		[projection]=2*[selectedMod]
+		[classum]=[projection]-1
+		[projection]
+		[classum]
+		
+		CP
+		<output>/aligned_avgs_<modBase>{***[num]}@{******[classum]}
+		<output>/aligned_avgs_<modBase>{***[num]}_sorted@{******[counter]}
+
+		[counter]=[counter]+1
+
+		CP
+		<output>/aligned_avgs_<modBase>{***[num]}@{******[projection]}
+		<output>/aligned_avgs_<modBase>{***[num]}_sorted@{******[counter]}
+	
+		[counter]=[counter]+1
+
+	lb78
+
+	UD ICE
+	<output>/FRC_classums_<modBase>{***[num]}_sort
+	
+lb50
+
+SD IC COPY
+incore_avgFRC
+<output>/FRC_iteration
+
+VM
+rm <output>/shifts_*
+
+VM
+rm <output>/proj.spi
+
+VM
+rm <output>/model_assignment.spi
+
+
+
+en d

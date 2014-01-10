@@ -1,0 +1,23 @@
+;;;;;;;
+
+FR
+?Input equivalently rotated stack? <stack>
+
+FR
+?Input select file basename from CAN? <select>
+
+RR [tot]
+?Number of class averages?
+
+;;;;;;
+
+do lb1 [part]=1,[tot]
+
+	AD S
+	<stack>@******
+	<select>_{****[part]}
+	<stack>_avgs@{*****[part]}
+
+lb1
+
+en d

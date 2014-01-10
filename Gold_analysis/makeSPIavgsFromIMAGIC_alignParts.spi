@@ -1,0 +1,184 @@
+;cat mra8.plt | gawk '{printf ("%5d   %1d    %-6.6f     %-6.6f     %-6.6f \n",NR,3,$2,$3,$4)}' >> rotAngles.spi
+
+;;;;;;;Shift, rotate & generate averages for particles using IMAGIC output;;;;;;
+
+FR
+?Input rotation & shift file from IMAGIC? <rot>
+
+FR
+?Input select file basename? <membership>
+
+RR [numAvgs]
+?Number of averages?
+
+RR [boxSize]
+?Box size?
+
+FR 
+?Input raw, norm ef particle stack? <stack> 
+
+FR
+?Input thresholded, masked ef particle stack? <thresh>
+
+FR
+?Input high defocus, en un-dusted particle stack? <stackHD>
+
+FR
+?Input high defocus, en un-dusted filtered particle stack? <stackHDfilt>
+
+FR
+?Input thresholded, masked en particle stack? <stackENM>
+
+FR
+?Input stack of averages for this iteration of autoAlign? <avgs>
+
+FR
+?Output folder? <output>
+
+;;;;;;;;;;;;;;;
+
+UD N [numParts]
+<rot>
+
+VM
+mkdir <output>
+
+[numClasses]=0
+
+[one]=1 	;a useful one
+
+;;Shift & rotate particles
+
+do lb1 [part]=1,[numParts]
+	
+	UD IC [part] [MRApsi] [SHX] [SHY]
+	<rot>
+
+	SH F
+	<stack>@{*****[part]}
+	<output>/ef_shifted@{*****[part]}
+	[SHY],[SHX]
+
+	SH F
+	<stackENM>@{*****[part]}
+	<output>/enM_shifted@{*****[part]}
+	[SHY],[SHX]
+
+	SH F
+	<stackHD>@{*****[part]}
+	<output>/en_shifted@{*****[part]}
+	[SHY],[SHX]
+
+	SH F
+	<thresh>@{*****[part]}
+	<output>/efM_shifted@{*****[part]}
+	[SHY],[SHX]
+
+	SH F
+	<stackHDfilt>@{*****[part]}
+	<output>/enFilt_shifted@{*****[part]}
+	[SHY],[SHX]
+	
+	RT SQ
+	<output>/ef_shifted@{*****[part]}
+	<output>/ef_shiftedRot@{*****[part]}
+	-[MRApsi],1
+
+	RT SQ
+        <output>/enM_shifted@{*****[part]}
+        <output>/enM_shiftedRot@{*****[part]}
+        -[MRApsi],1
+
+	RT SQ
+        <output>/efM_shifted@{*****[part]}
+        <output>/efM_shiftedRot@{*****[part]}
+        -[MRApsi],1
+	
+	RT SQ
+	<output>/en_shifted@{*****[part]}
+	<output>/en_shiftedRot@{*****[part]}
+ 	-[MRApsi],1
+	
+	RT SQ
+	<output>/enFilt_shifted@{*****[part]}
+	<output>/enFilt_shiftedRot@{*****[part]}
+	-[MRApsi],1
+
+lb1 
+
+BL
+blank
+[boxSize],[boxSize]
+N
+(0)
+
+UD ICE
+<rot>
+
+
+;Separate particles into stacks of particles for each class view
+
+do lb79 [class]=1,[numAvgs]
+
+	UD N [numPartsAvg]
+	<membership>_{****[class]}
+
+	MS
+	_1@
+	[boxSize] [boxSize] 1
+	[numPartsAvg]*6
+
+	do lb78 [particle]=1,[numPartsAvg]
+
+		;counting variables
+		
+		[six]=6*[particle]
+		[five]=[six]-1
+		[four]=[five]-1
+		[three]=[four]-1		
+		[two]=[three]-1
+		[one]=[two]-1
+
+		UD IC [particle] [selPart]
+		<membership>_{****[class]}
+
+		CP
+		<avgs>@{*****[class]}
+		_1@{******[one]}
+
+		CP
+		<output>/enFilt_shiftedRot@{*****[selPart]}
+		_1@{*****[two]}
+
+		CP
+		<output>/en_shiftedRot@{*****[selPart]}
+		_1@{*****[three]}
+
+		CP
+                <output>/enM_shiftedRot@{*****[selPart]}
+                _1@{*****[four]}
+
+		CP 
+		<output>/ef_shiftedRot@{*****[selPart]}
+		_1@{*****[five]}
+		
+		CP
+		<output>/efM_shiftedRot@{*****[selPart]}
+		_1@{*****[six]}
+		
+
+	lb78
+
+	UD ICE 
+	<membership>_{****[class]}
+
+	CP 
+	_1@
+	<output>/class{***[class]}@
+
+	DE
+	_1@
+
+lb79
+
+en 

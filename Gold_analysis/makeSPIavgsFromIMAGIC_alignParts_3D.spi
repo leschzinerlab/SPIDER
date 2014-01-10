@@ -1,0 +1,440 @@
+;cat mra8.plt | gawk '{printf ("%5d   %1d    %-6.6f     %-6.6f     %-6.6f \n",NR,3,$2,$3,$4)}' >> rotAngles.spi
+
+;;;;;;;Shift, rotate & generate averages for particles using IMAGIC output;;;;;;
+
+RR [boxSize]
+?Box size?
+
+FR 
+?Input raw, norm ef particle stack? <stack> 
+
+FR
+?Input thresholded, masked ef particle stack? <thresh>
+
+FR
+?Input high defocus, en un-dusted particle stack? <stackHD>
+
+FR
+?Input high defocus, en un-dusted filtered particle stack? <stackHDfilt>
+
+FR
+?Input thresholded, masked en particle stack? <stackENM>
+
+FR
+?Input volume? <vol>
+
+RR [numParts]
+?Number of particles?
+
+FR
+?Output folder? <output>
+
+;;;;;;;;;;;;;;;
+
+VM
+mkdir <output>
+
+;;;3D alignment to filtered, high defocus particles;;;;;;
+
+;Set variables:
+
+[radius]=[boxSize]/2
+[imageCenter]=(INT([boxSize]/2)+1)
+[allowedShift]=0.15*[boxSize]
+[thetaMin]=0
+[thetaMax]=90
+[psiMin]=0
+[psiMax]=359.9
+[angStep]=20
+
+;;;;;;;;;;;;;;;;;SET ANGULAR STEP HERE!!;;;;;;;;;;;;;;;;;
+
+VO EA [numAngles]		; generate angular file
+([angStep])
+([thetaMin],[thetaMax])
+([psiMin],[psiMax])
+<output>/angles
+
+;;;;;;;;;;;;;;;;;;;;;;;Projection matching;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	;;;;;;;;;;;;;;;;;Create projections of the model;;;;;;;;;;;;
+	
+	PJ 3Q				; project ref according to angular file
+	<vol>		; proj last reference
+	([boxSize]/2)
+	(1-[numAngles])
+	<output>/angles
+	<output>/proj_<vol>@*****
+	
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	
+	
+	;;;;;;;;;;;;;;;;;Compare particles to projections of the model;;;;;;;;;;;;;;;;;;
+	
+	AP SH				; HUGE function.  Is the heart of proj matching.  Compares parts to ref
+	<output>/proj_<vol>@*****
+	(1-[numAngles])
+	([boxSize]*0.0625,2)		; allow shift up to ~1/20 box size at one pixel intervals (can edit this!)
+	(1,[boxSize]*0.3,1,1)		; allow rings from center to 90% of box to be used for rotational alignment
+	<output>/angles	; angles of the reprojections
+	<stackHDfilt>@******		; particles to be matched
+	(1-[numParts])		; number of particles
+	*				; can include previous alignment params here to limit search
+	(0.0,0.0)			; amount to restrict
+	(1)				; check mirrors
+	<output>/apsh_<vol>		; AP SH output text file with all alignment info
+	
+	
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                                			;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    Calculate & apply shifts to particles     	;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    for back projection                		;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	
+		;cross correlation will be used to center the particles relative to the projected reference.
+		;Based on the cross correlation, the shifts for each particle will be calculated
+		;and can then be applied prior to back projection
+	
+						; [avgCC] - average correlation coefficient. 
+	[avgCC]=0.0                        	;This is set to zero, but will be added to at the end of the master loop
+	
+	
+	;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;        Step 1:  Prepare reference projection & particle
+	;;;;;;;;;;;;;;;;
+	
+	
+	DO LB5 [particle]=1,[numParts]           
+	
+		UD IC [particle],[psi],[theta],[phi],[matchedProj],[expNum],[cumPsi],[cumX],[cumY],[numSearched],[angChange],[CC],[curPsi],-[SHX],-[SHY],[Mir]   
+		<output>/apsh_<vol>
+		
+		[curPsi]=-[curPsi]                    		;Since the rotangle is calculated for the particle, its sign
+								;must be inverted to properly rotate the reference proj.
+		
+		;When particles best align to a mirrored projection of a reference, it is indicated by a negative value in front of
+		;the ref proj number. When [Mir] is negative, the particle was best aligned to the mirrored reference.
+		
+		IF([Mir].GT.0) GOTO LB61                	;see previous comment
+		
+									; The following steps are applied to the mirrored references.  It should be noted that mirroring is equivalent
+									;to a rotation greater than 90
+			
+			MR                            			;mirror image command
+			<output>/proj_<vol>@{*****[matchedProj]}        ;selects input reference projection
+			_3                            			;temporary output image
+			Y                            			;mirrors across Y axis
+			
+			;now that the reference projection has been mirrored appropriately, it will be rotated to be aligned to the
+			;particles.  Note that it is not shifting the reference, only rotating it.
+			
+			RT SQ                            		;rotate and shift image       
+			_3                            			;temporary output from the mirroring command previous
+			_2                            			;output – rotated reference projection
+			[curPsi]                        		;rotation angle
+			(0,0)                            		;no shifting!
+			
+			goto LB62
+		
+		LB61
+		;for particles that did not align to the mirrored reference, the reference is simply rotated (like above)
+		
+		RT SQ                            		;rotate and shift image
+		<output>/proj_<vol>@{*****[matchedProj]}        	;input reference projection
+		_2                            			;output – rotated reference projection
+		[curPsi]                        		;rotation angle
+		(0,0)                            		;no shifting!
+		
+		
+		LB62
+		
+		;Now we have the reference projection correctly rotated and mirrored (if necessary) and we will prepare it for
+		;alignment to the particle
+		
+		MA                                		;mask image
+		_2                                		;reference projection
+		_3                                		;output – masked reference projection
+		[radius]                            		;radius of mask
+		D                                		;shape of mask:  D=disc
+		E                                		;choice of mask pixels: E=externally determined
+		(0)                                		;value for mask pixels, the “externally determined” value
+		[imageCenter],[imageCenter]                	;center coordinates for mask
+		
+		;The masked reference projection will now be padded with extra pixels, making it twice the box size
+		
+		PD                                		;pad image
+		_3                                		;input – masked reference projection
+		_2                                		;output – padded, masked, reference projection
+		([boxSize]*2),([boxSize]*2)                    	;dimensions of padding
+		N                                		;Average?  Ans: N – no.  Value will be inputted below
+		(0.000E+00)                            		;value of padded pixels
+		(1,1)                                		;top left coordinates:  not sure why the image is placed in the top
+								;left corner instead of the middle of the padded image
+		
+		;The unfiltered particle will also be padded before alignment to reference
+		
+		CP                                		;copy image
+		<stackHDfilt>@{******[particle]}                    	;retrieve particle from stack
+		_3                                		;output – unfiltered particle from stack
+		
+		PD                                		;pad image
+		_3                                		;input – unfiltered particle from stack
+		_1                                		;output – padded unfiltered particle from stack
+		([boxSize]*2),([boxSize]*2)                  	;dimensions of padding
+		B                                		;B(order) – background value will be equal to avg. pixel value
+		(1,1)                                		;top left corner coordinates:  still not sure about it.
+		
+		;;;;;;;;;;;;;;;;;;
+		;;;;;;;;;;;;;;;;;;
+		;;;;;;;;;;;;;;;;;;    Step 2:  Cross correlate the particle and reference projection
+		;;;;;;;;;;;;;;;;;;
+		
+		CC N                                		;calculate a normalized cross correlation image
+		_1                               		;input – padded unfiltered particle
+		_2                                		;ref input – padded, masked, reference projection
+		_1                                		;output – replaces the input with the cross correlation image
+		
+		;The cross correlation image contains peak(s) corresponding to the X & Y shifts necessary to align the particle to
+		;the reference.  We need to read off this peak with the X&Y coordinates, and the coordinates will be shifts.
+		
+		WI                                		;Window command
+		_1                                		;input – cross correlation output from CC N
+		_2                                		;output – a larger box size
+		(([allowedShift]*2)+1),(([allowedShift]*2)+1)      ;new window size
+		([boxSize]-[allowedShift]+1),([boxSize]-[allowedShift]+1)  ;new top left coordinates
+		
+		;Peak search (PK) is now performed on the windowed cross correlation image so that the X & Y coordinates correspond
+		;to X & Y shifts.
+		
+		PK [PK_X],[PK_Y],[PK_value],[PK_ratio],[PK_coords_X],[PK_coords_Y],[PK_coords_max]
+		_2                                		;input – windowed cross correlation image
+		(0)                                		;number of peaks
+		
+		; In case there was no peak found for translation, the peak value [PK_coords_max] is 0.
+		; In this case get a value at the origin of the CCF and store in in shift document file.
+		; This value is needed for sorting and calculation of the average correlation coeff.
+		
+		;IF([PK_coords_max].EQ.0.0) THEN            	;If the value of the max peak equal zero, get the origin pixel
+								;intensity
+		;	GP [PK_coords_max]                	;get pixel value command
+		;	_2                            		;input – windowed cross correlation image
+		;	([allowedShift]+1),([allowedShift]+1)   ;center coordinates
+		;	
+		;	;Since there were no peaks found, the particle does not need to be shifted.  Therefore, the unshifted
+		;	;unfiltered particle is copied into the shifted particle stack
+		;	
+		;	CP                            		;copy
+		;	_3                            		;input – unfiltered particle from stack
+		;	<output>/enFilt_shifted@{******[particle]}            ;output – new shifted stack
+		;	
+		;ELSE                                		;for all other particles that need to be shifted
+		
+		;	SH F                            		;shift image using fourier interpolation (accurate!)
+		;	_3                            			;input – unfiltered particle from stack
+		;	<output>/enFilt_shifted@{******[particle]}        	;output – placement into new shifted particle stack
+		;	-[PK_coords_X],-[PK_coords_Y]            	;coordinates from PK used to shift the particles.  Note that the
+		;							;sign is negative (spider convention)
+		
+		;ENDIF
+		
+		;The final step is to start a running count of the correlation coefficients.  Initially, the [avgCC] is equal to
+		;zero, but all of the new CC values are added together to get the total sum of cross correlation values.
+		
+		[avgCC]=[avgCC]+[PK_coords_max]
+		
+		;This will output the shift parameters
+		
+		SD [particle],[PK_coords_X],[PK_coords_Y],[PK_coords_max]
+		<output>/shifts_<vol>
+
+	UD ICE 
+	<output>/apsh_<vol>
+
+	LB5                                    				;end of the loop for each particle
+	
+	;Calculate the average cross correlation coefficient by dividing the total cross correlation value by the number of
+	;particles
+	
+	[avgCC]=[avgCC]/[numParts]
+	
+	SD -1,[avgCC]                            			;this saves the [avgCC] value as a comment in the last line
+	<output>/shifts_<vol>			;of the shifts file using 1 register (column)
+	
+	SD E                                    			;closes the shifts file
+	<output>/shifts_<vol>
+	
+	; remove inline files
+	DE
+	_1
+	
+	DE
+	_2
+	
+	DE
+	_3
+
+lb2								;end of loop for each reference
+
+
+
+
+[numClasses]=0
+
+[one]=1 	;a useful one
+[count]=1
+;;Shift & rotate particles
+
+do lb1 [part]=1,[numParts]
+	
+	UD IC [part],[psi],[theta],[phi],[matchedProj],[expNum],[cumPsi],[cumX],[cumY],[numSearched],[angChange],[CC],[curPsi],-[SHX],-[SHY],[Mir]   
+	<output>/apsh_<vol>
+
+	UD IC [part] [SHX],[SHY]
+	<output>/shifts_<vol>
+
+	RT SQ
+	<stackHD>@{*****[part]}
+	en
+	[curPsi],1
+	-[SHX],-[SHY]
+
+	RT SQ
+	<stack>@{*****[part]}
+	ef
+	[curPsi],1
+	-[SHX],-[SHY]
+	
+	RT SQ
+	<thresh>@{*****[part]}
+	efTH
+	[curPsi],1
+	-[SHX],-[SHY]
+
+	RT SQ
+	<stackHDfilt>@{*****[part]}
+	enFilt
+	[curPsi],1
+	-[SHX],-[SHY]
+
+	RT SQ
+	<stackENM>@{*****[part]}
+	enM
+	[curPsi],1
+	-[SHX],-[SHY]
+
+	IF([Mir].LT.0)THEN
+
+		MR
+		en
+		tmp2
+		Y
+			
+		CP 
+		tmp2
+		en
+			
+		MR
+		ef
+		_5
+		Y
+			
+		CP 
+		_5
+		ef
+		
+		MR
+		efTH
+		_6
+		Y
+			
+		CP 
+		_6
+		efTH
+
+		MR
+		enFilt
+		_9
+		Y
+			
+		CP 
+		_9
+		enFilt
+
+		MR
+		enM
+		_8
+		Y
+			
+		CP 
+		_8
+		enM		
+
+	ENDIF
+		
+	[next]=[count]+1
+	[next2]=[count]+2
+	[next3]=[count]+3
+	[next4]=[count]+4
+	[next5]=[count]+5
+
+	CP
+	<output>/proj_<vol>@{*****[matchedProj]}
+	<output>/output@{*****[count]}
+
+	CP
+	enFilt
+	<output>/output@{*****[next]}
+	
+	CP
+	en
+	<output>/output@{*****[next2]}	
+
+	CP	
+	enM
+	<output>/output@{*****[next3]}	
+
+	CP
+	ef
+	<output>/output@{*****[next4]}	
+
+	CP
+	efTH
+	<output>/output@{*****[next5]}
+
+	[count]=[count]+6
+	
+	DE
+	enFilt
+	
+	DE
+	en
+
+	DE
+	enM
+
+	DE
+	ef
+
+	DE
+	efTH
+	
+	DE
+	_5
+
+	DE
+	_6
+
+	DE
+	_9
+
+	DE
+	8
+	
+	DE
+	tmp2
+
+lb1
+
+
+
+en 

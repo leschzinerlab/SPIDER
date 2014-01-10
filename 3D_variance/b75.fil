@@ -1,0 +1,79 @@
+;;;;;;;
+
+FR
+?Directory of bootstrapped volumes? <dir>
+
+FR
+?Select file used in bootstrapping? <select>
+
+RR [numVols]
+?Number of bootstrapped volumes?
+
+RR [boxSize]
+?Box size?
+
+;;;;;;;;
+
+
+md
+set mp
+4
+
+;vm
+;mkdir <dir>
+
+;Number of bootstrap volumes created by VA 3Q
+;[numVols]=500
+
+MS
+_8@
+([boxSize],[boxSize],[boxSize])
+[numVols]
+
+
+do lb5 x21=1,[numVols]
+AR
+<dir>/vol{*****x21}
+;<dir>/fil_vol{*****x21}
+_8@{****X21}
+P1*10000
+lb5
+
+;Filter to the resolution of the reconstruction (??)
+do lb1 x21=1,[numVols]
+FQ NP
+_8@{****X21}
+;<dir>/fil_vol{*****x21} 
+_1
+(7)
+(0.09,0.19)
+CP
+_1
+_8@{****X21}
+;<dir>/fil_vol{*****x21}
+
+lb1
+
+; claculate variance maps for the volumes *10000 and filtered
+
+VA 3R
+_8@*****
+;<dir>/fil_vol*****              ;Vdl06/vfl@****
+(1-[numVols])
+<dir>/AVG	; Average file
+<dir>/VAR	; Variance file
+<dir>/RVAR	; relvariance file
+
+; Multiply by the number of projections
+UD N,X51                       ;  <dir> number of projections
+<select>
+
+AR
+<dir>/VAR
+<dir>/VAR2	; Variance * nb of particles (real variance estimate)
+X51*P1
+
+
+
+en d
+

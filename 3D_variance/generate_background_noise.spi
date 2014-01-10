@@ -1,0 +1,32 @@
+;Generating "background noise" for 3D variance by taking the particles and shifting them by half the window size:  40 pixels.  
+
+;;;;;
+
+FR
+?Input stack? <stack>
+
+RR x99
+?Number of particles?
+
+RR x98
+?Box size?
+
+;;;;;
+
+md
+set mp
+4
+
+;Shift particles by 2/5 box size
+x97=(.4*(x98))
+
+DO LB1 x21=1,x99
+	
+	SH 
+	<stack>@{*****x21}
+	<stack>_noise@{*****x21}
+	(x97,x97)
+
+LB1
+
+en d

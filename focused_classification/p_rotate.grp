@@ -1,0 +1,48 @@
+fr
+?Doc file from AP MD?
+;<1> docapmD
+fr
+? name of input particles?
+;<2> original particles, already 'centered' ->apply 0,0 shift
+fr
+? name of rotated particles?
+;<3> rotated particles 
+
+
+
+;  x51 - number of projections
+
+ud n,x51,x53
+<1>
+
+do lb1 i=1,x51
+x55=x0
+ud ic,x55,x21,x22,x23,x24,x25,x26
+<1>
+;if(x21.gt.x51) then
+if(x21.lt.0) then
+rt sq
+<2>x26
+_1
+x23
+(0,0)
+mr
+_1
+<3>x26
+Y
+else
+rt sq
+<2>x26
+<3>x26
+x23
+(0,0)
+endif
+lb1
+
+ud ice
+<1>
+
+de
+_1
+
+re

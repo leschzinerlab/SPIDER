@@ -1,0 +1,85 @@
+;Given a list of "bad" classums that you wish to discard, this will generate a new stack excluding the particles listed
+
+;To write out a SPIDER file from a text file:
+;cat bad.lis | gawk '{printf ("%5d %1d  %-6.2f \n",NR,1,$0)}' >> bad.spi
+
+;;;;;;;;;;;;
+
+FR
+?Input original particle stack? <stack>
+
+FR
+?Input general name for select files? <select>
+
+RR [numAvgs]
+?How many class avgs in this iteration?
+
+FR
+?Input list of bad classums? <selFile>
+
+RR [boxSize]
+?Box size?
+
+;;;;;;;;;;;
+
+MD 
+SET MP 
+(0)
+
+DOC CREATE
+selected
+1
+1-[numAvgs]
+
+DOC SUBTRACT
+selected
+<selFile>
+selected_subtracted
+1
+
+DOC REN
+selected_subtracted
+selected_subtracted_ren
+
+DOC COMBINE	;combine all of the select files into a single select file
+<select>****
+selected_subtracted_ren
+select_merge
+
+UD N [numParts]
+select_merge
+
+SD IC NEW
+ICsel_<ctf>
+6,[numParts]
+
+MS 
+_8@
+[boxSize] [boxSize] 1
+[numParts]
+
+DO LB1 [particle]=1,[numParts]
+		
+	UD IC [particle] [selParticle]
+	select_merge
+
+	CP
+	<stack>@{******[selParticle]}
+	_8@{******[particle]}
+
+LB1
+
+UD ICE
+select_merge
+	
+CP
+_8@
+sel_<stack>@
+
+
+EN D
+	
+		
+		
+
+
