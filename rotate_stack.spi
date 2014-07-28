@@ -1,0 +1,37 @@
+;;;;;;;;;;;;;;;;;
+
+FR 
+?Input AP SH alignment file? [apsh]
+
+FR
+?Input particle stack? [stack]
+
+;;;;;;;;;;;;;;;;;
+
+UD N [tot]
+[apsh]
+
+do lb1 [part]=1,[tot]
+
+	UD IC [part] [one] [two] [three] [four] [five] [rot] [sx] [sy] [nine] [ten] [eleven] [twelve] [thirteen] [fourteen] [mirror]
+	[apsh]
+	IF([mirror].EQ.-1) THEN
+		MR
+		[stack]@{******[part]}
+		_1
+		Y
+	ENDIF
+	IF([mirror].EQ.1) THEN
+		CP
+		[stack]@{******[part]}
+		_1
+	ENDIF
+	RT SQ
+	_1
+	[stack]_aligned@{*********[part]}
+	[rot],1
+	[sx],[sy]
+
+lb1
+
+en d
