@@ -1,0 +1,56 @@
+;This script will filter a SPIDER stack using butterworth filter for low pass filter
+
+;To run:
+;spider spi @lowpass_filter_stack
+
+; TEM|pro - mcianfrocco
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+FR
+?Input stack?[stack]
+
+RR [numParts]
+?Number of particles?
+
+RR [pix]
+?Pixel size (A/pix)?
+
+RR [lowfilt]
+?Input resolution to which the particles will be LOW pass filtered? 
+
+RR [highfilt]
+?Input resolution to which the particles will be HIGH passfiltered?
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;Set multiprocessors
+MD
+SET MP
+(2)
+
+;Convert low pass filter into spatial frequency units
+[lowPass_PassBand] = [pix]/([lowfilt]-0.025)
+[lowPass_StopBand] = [pix]/([lowfilt]+0.025)
+[highPass_PassBand] = [pix]/([highfilt]+0.0015)
+[highPass_StopBand] = [pix]/([highfilt]-0.0015)
+
+;Loop over all particles
+do lb1 [part] = 1,[numParts]
+
+	FQ
+	[stack]@{******[part]}
+	_3
+	(7)
+	([lowPass_PassBand],[lowPass_StopBand])
+
+	FQ
+	_3
+	[stack]_lp{**[lowfilt]}A_hp{****[highfilt]}@{******[part]}
+	(8)
+	([highPass_PassBand],[highPass_StopBand])		
+
+lb1
+
+;end script
+EN D
