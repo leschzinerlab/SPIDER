@@ -69,23 +69,39 @@ def box_to_spi(boxfile,spiout):
 	return l[2]
 
 #==============================
-def spi_to_box(spifile,boxsize,outbox):
+def spi_to_box(spifile1,boxsize,outbox1,spifile2,outbox2):
+        
+	o1 = open(outbox1,'w')
+	o2 = open(outbox2,'w')
+        tot = len(open(spifile1,'r').readlines())
+	i = 1
+	boxsize=float(boxsize)
 
-        o1 = open(outbox,'w')
+        while i <= tot:
 
-        f1 = open(spifile,'r')
+		l1 = linecache.getline(spifile1,i)
+		l2 = linecache.getline(spifile2,i)
 
-        for line in f1:
+		line1 = l1.split()
+		line2 = l2.split()
 
-                if line[1] == ';':
-                        continue
+                if l1[1] == ";":
+                        i = i + 1
+			continue
 
-                l = line.split()
+                x1 = float(line1[3])-boxsize/2
+                y1 = float(line1[4])-boxsize/2
+		x2 = float(line2[3])-boxsize/2
+                y2 = float(line2[4])-boxsize/2
 
-                x = float(l[3])-boxsize/2
-                y = float(l[4])-boxsize/2
+		if x1+boxsize+2 < 4096: 
+			if y1+boxsize+2 < 4096:
+				if x2+boxsize+2 < 4096:
+					if y2+boxsize+2 < 4096:
+                				o1.write('%i\t%i\t%i\t%i\t-3\n' %(int(x1),int(y1),int(boxsize),int(boxsize)))
+						o2.write('%i\t%i\t%i\t%i\t-3\n' %(int(x2),int(y2),int(boxsize),int(boxsize)))
 
-                o1.write('%i\t%i\t%i\t%i\t-3\n' %(int(x),int(y),int(boxsize),int(boxsize)))
+		i = i + 1
 
 #==============================
 if __name__ == "__main__":
@@ -115,8 +131,8 @@ if __name__ == "__main__":
 		untiltedbox_out = '%s_align.box' %(untiltedmicro[:-4])
 
 		#Check to see that untilted box file exists
-		if not os.path.exists(untiltedbox):
-			print 'Error: Box file %s does not exist. Skipping micrograph %s' %(untiltedbox,untiltedmicro)
+		if os.path.exists(untiltedbox_out):
+			print 'Error: Box file %s exists. Skipping micrograph %s' %(untiltedbox_out,untiltedmicro)
 			continue
 
 		#Create tilted micro & box name by removing '01.mrc' and replacing with '00.mrc' or '00.box'
@@ -151,14 +167,17 @@ if __name__ == "__main__":
 		subprocess.Popen(cmd,shell=True).wait()
 
 		#Convert spi files into box format
-		spi_to_box('output/final_tlt_coordinates_00286.spi',boxsize,tiltbox)
-		spi_to_box('output/final_unt_coordinates_00286.spi',boxsize,untiltedbox_out)
+		spi_to_box('output/final_tlt_coordinates_00286.spi',boxsize,tiltbox,'output/final_unt_coordinates_00286.spi',untiltedbox_out)
+
+		#Copy apsh file
+		cmd = 'output/apsh_00286.spi %s_apsh.spi' %(untiltedbox_out[:-4])
+		subprocess.Popen(cmd,shell=True).wait()
 
 		#Clean up
-		#cmd = 'rm -r output _10.spi coordinates_micrograph_286.spi dummy_angles.spi image_00286_00.spi image_00286_01.spi LOG.spi results.spi.*' 
-		#subprocess.Popen(cmd,shell=True).wait()
+		cmd = 'rm -r output _10.spi coordinates_micrograph_286.spi dummy_angles.spi image_00286_00.spi image_00286_01.spi' 
+		subprocess.Popen(cmd,shell=True).wait()
 
 	#Final clean up
-	#cmd = 'rm p.* b00.find_tlt_parts_final.spi
-	#subprocess.Popen(cmd,shell=True).wait()
+	cmd = 'rm p.* b00.find_tlt_parts_final.spi'
+	subprocess.Popen(cmd,shell=True).wait()
 	
