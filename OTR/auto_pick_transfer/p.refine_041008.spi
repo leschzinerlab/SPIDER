@@ -1,0 +1,393 @@
+[x74,x75,x40,x41,x50,x51,x83,x84,x96,x97,x27]
+;refine_tlt_coordinates.spi
+;
+;This procedure is part of the batch that will pick the tilted particles from a set of tilt pairs using the coordinates
+;determined from picking only the untilted particles. This procedure uses the set of initial coordinates obtained by
+;applying the alignment parameters to the coordinates from the UNT micrograph to window out portions of the TLT
+;micrograph. These areas are used in cross-correlation against a "reference" from the UNT one (consisting of a rotated
+;and interpolated particle area) and the resulting peak of the cross-correlation function is used to obtain the final
+;set of particle coordinates to be used in windowing.
+;Because particles located near the edge of the micrograph would be excluded if one were to use the largeer window size
+;to compute the CC, this procedure will adjust the box size for those particles that are closer to the edge than would be
+;allowed by the x75-sized window. The box size will be changed to the intended final box size (x74). While using a "floating"
+;box size (adjusted depending on the distance of the particle to the edge) might seem like a good idea, the problem lies in the
+;fact that some dimensions will end up being incompatible with the Fourier operations that happen later (FQ and CC) and that would lead to incorrect answers.
+;
+;
+;**********************************************************************************************************************
+;
+FR
+? UNTilted micrograph ?
+; <1> R373u
+
+FR
+? TiLTed micrograph ?
+; <2> R373t
+
+FR
+? particle coordinates for the UNT micrograph (for particles whose tlt partners are within the boundaries) ?
+; <3> dcu373
+
+FR
+? initial particle coordinates for the TLT micrograph (for particles within boundaries) ?
+; <4> initial_tlt_coordinates_inside
+
+FR
+? file with micrograph alignment parameters ?
+; <5> ugraph_align_results_by_CCC
+
+FR
+? select file of particle pairs where TLT mate is within boundaries ?
+; <6> select_unt_tlt_particles_inside
+
+FR
+? final coordinates for TLT particles ?
+; <7> final_tlt_coordinates
+
+FR
+? shifts from CC N/PK ?
+; <8> shifts_CC
+
+FR
+? save particles and their box size ?
+; <9> particle_boxsize
+;
+FR
+? final set of UNT particles ?
+; <10> final_unt_coordinates
+;
+;
+;x74 - final intended box for windowing of particles (smallest box used for near-edge particles)
+;x75 - box size for windowing of particles from TLT micrograph for cross-correlation
+;x40 - micrograph size in X
+;x41 - micrograph size in Y
+;x50 - micrograph center along X
+;x51 - micrograph center along Y
+;x83 - stop-band for Butterworth low pass
+;x84 - pass-band for Butterworth low pass
+;x96 - stop-band for Butterworth high pass for refinement of coordinates
+;x97 - pass-band for Butterworth high pass for refinement of coordinates
+;x27 - mask radius for UNT reference for the cross-correlation (in pixels)
+;***********************************************************************************************************************
+;
+;               Retrieve the micrograph alignment parameters from the parameters file
+UD N x66
+<5>
+;		sort the full output from the micrograph alignment by CC coefficient
+DOC SORT
+<5>
+_10
+(4)
+YES
+;
+;               x35 - tilt (theta) angle
+;               x36 - in-plane rotation (before tilting) for UNT micrograph
+;               x57 - cross-correlation coefficient
+;               x37 - in-plane rotation for TLT micrograph from AP NQ
+;
+UD S x66,x11,x35,x36,x57,x37
+_10
+;               the in-plane rotation angle for the TLT micrograph must have its sign flipped as we're going from
+;               UNT to TLT
+;               COMMENTED OUT THE FOLLOWING LINE
+;x37=-x37
+;               Find out how many of the particles were selected as "good" because the TLT mates are within
+;               the boundaries
+UD N x66
+<6>
+;
+;***********************************************************************************************************************
+;		*** LOOP OVER ALL THE GOOD PARTICLES--GENERATE REFERENCE AND CALCULATE CC N BETWEEN IT AND
+;			THE CORRESPONDING AREA IN THE TILTED MICROGRAPH *** 
+;
+DO LB1 x19=1,x66
+;
+;		get particle numbers
+UD IC x19,x20
+<6>
+;		use the number to retrieve the coordinates for the UNT micrograph
+UD S x20,x11,x21,x22
+<3>
+;		Save the final set of Untilted particles to help in comparison later
+SD x19,x11,x21,x22
+<10>
+;               CHECK IF THE PARTICLE IS TOO CLOSE TO THE EDGE TO USE x75 AS THE WINDOW SIZE FOR CROSS-CORRELATION
+;
+;               We will check if the particle is closer to the edge than x75 would allow. If that is the case, the box size will be changed
+;               to the intended final box size (x74) and the mask will be the full radius (x23).
+;
+;               We will check whether the center of the particle is closer than x25 (half the large box size) in any direction. If that is the
+;               case, we will change the box size to the smaller x74.
+;
+;		x76 - This will be the box size used for windowing - it will be updated throughout the procedure depending on the particle's location
+;		Set x76 to the default larger window size -- this will changed below if necessary
+x76=x75
+;
+;               x91 - Difference between micrograph dimensions along X and particle's X coordinate; used to check right side of micrograph
+x91=x40-x21
+;               x92 - Difference between micrograph dimensions along Y and particle's Y coordinate; used to check bottom of micrograph
+x92=x41-x22
+;               Check all conditions and update box size if necessary
+;
+;               1 - Check of particle is too far to the right...
+;
+IF(x91.LE.x25)GOTO LB10
+;
+;               2 - ... or too far to the left
+;
+IF(x21.LE.x25)GOTO LB10
+;
+;               3 - Check if it's too far down...
+;
+IF(x92.LE.x25)GOTO LB10
+;
+;               4 - ... or too close to the top.
+;
+IF(x22.LE.x25)GOTO LB10
+;
+;               If none of the conditions were met, the particle can be safely windowed with the large box and we can skip the updating.
+GOTO LB20
+;               This section will update the box size and mask.
+LB10
+;               Change the window size used below (x76) to the smaller, final one (x74)
+x76=x74
+;		change half the box size to reflect the smaller window size
+;x25=INT(x76/2)
+;               Change the smaller mask radius (x27) to one that will go to the edge of the smaller box (x23)
+;x26=x23
+;
+LB20
+;
+;**************************************************************************************************************************
+;		Half the box size
+x25=INT(x76/2)
+;	
+;		If box size is 128 then skip this part
+;
+IF(x76.EQ.x74)GOTO LB23
+;		Retrieve coordinates for the Tilted micrograph
+;
+UD S x20,x11,x21,x22
+<4>
+;		change x coordinates relative to origin of image
+x33=x21+x50
+;		change y coordinates relative to origin of image
+x34=x22+x51
+;
+;               x91 - Difference between micrograph dimensions along X and particle's X coordinate; used to check right side of micrograph
+x91=x40-x33
+;               x92 - Difference between micrograph dimensions along Y and particle's Y coordinate; used to check bottom of micrograph
+x92=x41-x34
+;               Check all conditions and update box size if necessary
+;
+;               1 - Check of particle is too far to the right...
+;
+IF(x91.LE.x25)GOTO LB22
+;
+;               2 - ... or too far to the left
+;
+IF(x33.LE.x25)GOTO LB22
+;
+;               3 - Check if it's too far down...
+;
+IF(x92.LE.x25)GOTO LB22
+;
+;               4 - ... or too close to the top.
+;
+IF(x34.LE.x25)GOTO LB22
+;
+;               If none of the conditions were met, the particle can be safely windowed with the large box and we can skip the updating.
+GOTO LB21
+;               This section will update the box size and mask.
+LB22
+;               Change the window size used below (x76) to the smaller, final one (x74)
+x76=x74
+;		change half the box size to reflect the smaller window size
+x25=INT(x76/2)
+;               Change the smaller mask radius (x27) to one that will go to the edge of the smaller box (x23)
+;x26=x23
+;
+LB21
+;
+;***************************************************************************************************
+LB23
+;
+;		x25 - half the box size
+;x25=INT(x76/2)
+;		x26 - mask radius for reference (UNT) particles
+x26=INT(x76*0.99/2)-1
+;               x23 - mask radius for particles whose position will be refined (TLT)
+x23=INT(x76*0.99/2)-1
+;               x85 - twice the box size, for padding
+x85=2*x76
+;               x86 - top-left coordinates for padding for CC
+x86=((x85-x76)/2)+1
+;               x87 - top-left coordinates for windowing of CC function for peak search
+x87=((x76-x25)/2)+1
+;
+
+;***********************************************************************************************************************
+;		save the particle number and the box size 
+SD x20,x76
+<9>	
+;
+;		calculate the dimensions of the window along X taking into account the interpolation that will follow. We must take into account that the convention that a tilt angle > 0 leads to an expansion while a tilt angle < 0 leads to a shrinkage in the size of the micrographs. So for tilt angle > 0 we need a window that is smaller and for < 0 a final window that is larger. The only purpose of this is to end up with a box that has particles everywhere and not grey areas coming from the interpolation.(The only grey areas should come from the rotation)
+;		retrieve the coordinates for the UNT micrograph
+UD S x20,x11,x21,x22
+<3>
+;
+IF(x35.LT.0.0)GOTO LB11
+;
+;		x73 - dimensions along X
+x73=INT(x76*cos(x35))
+;		x24 - half the dimension of the interpolated X coordinate
+x24=INT(x73/2)
+;
+;		Next section deals with the tilt angles < 0 ==> skip
+GOTO LB12
+;
+LB11
+;		for tilt angles < 0 --> make a window that is larger
+;	
+;		x73 dimensions along X
+x73=INT(x76/cos(x35))
+;
+;		x24-half the dimensions of the interpolated X axis
+x24=INT(x73/2)
+;
+LB12
+;		calculate top-left coordinates for windowing of particle
+;		x31 - top-left X coordinate
+;		x32 - top-left Y coordiante
+x31=x21-x24
+x32=x22-x25
+;		window particle
+WI
+<1>
+_1
+(x73,x76,1)
+(x31,x32)
+;		apply the initial rotation that precedes "tilting" (interpolation)
+RT
+_1
+_2
+(x36)
+;		interpolate along X
+IP
+_2
+_1
+(x76,x76)
+;		apply second rotation that brings image in alignment with TLT counterpart
+RT
+_1
+_2
+(x37)
+;		Butterworth low-pass filter the image
+FQ
+_2
+_3
+(7)
+(x84,x83)
+;		Butterworth high-pass filter the image
+FQ
+_3
+_2
+(8)
+(x96,x97)
+;		apply soft mask
+MA
+_2
+_1
+(x26,0)
+(G)
+(E)
+(x25,x25)
+(0.0)
+(5)
+;		PREPARE THE CORRESPONDING AREA FROM THE TILTED MICROGRAPH
+;
+;		retrieve the initial coordinates for the TLT particles
+;
+;		get the particle numbers for the key
+UD IC x19,x20
+<6>
+;		retrieve coordinates for the particle
+UD S x20,x29,x21,x22
+<4>
+;		these coordinates are expressed relative to the micrograph center so they must be
+;		converted to the Spider convention of 0,0 at the top-left corner
+x21=x21+x50
+x22=x22+x51
+;		calculate top-left coordinates for the windowing
+;		x31 - top-left X coordinate
+;		x32 - top-left Y coordiante
+x31=x21-x25
+x32=x22-x25
+;		window particle
+WI
+<2>
+_3
+(x76,x76,1)
+(x31,x32)
+;		Butterworth low-pass filter the image
+FQ
+_3
+_2
+(7)
+(x84,x83)
+;		Butterworth high-pass filter the image
+FQ
+_2
+_3
+(8)
+(x96,x97)
+;		apply soft mask
+MA
+_3
+_2
+(x23,0)
+(G)
+(E)
+(x25,x25)
+(0.0)
+(5)
+;		calculate cross-correlation
+CC N
+_2
+_1
+_7
+;		find peak
+;		x11 - X coordinate of peak
+;		x12 - Y coordinate of peak
+;		x13 - cross-correlation coefficient
+;
+PK x11,x12,x13,x14,x15,x16,x17
+_7
+(1,0)
+(1)
+;		adjust the X and Y coordinates of the TLT particle based on the peak position
+x21=x21+x11
+x22=x22+x12
+;		save new coordinates
+;
+SD x19,x29,x21,x22
+<7>
+;		save the shifts from the CC N/PK
+;
+SD x19,x29,x11,x12,x13
+<8>
+
+LB1
+
+UD ICE
+<6>
+SD E
+<7>
+SD E
+<8>
+SD E
+<9>
+
+
+RE
+

@@ -1,0 +1,345 @@
+[x40,x41,x65,x34,x36,x38,x91,x93,x94,x86,x87,x95,x23,x24,x28,x72,x75]
+
+;
+;This procedure is part of the batch that will pick the tilted particles from a set of tilt pairs using the coordinates
+;determined from picking only the untilted particles.It will figure out the initial alignment parameters between
+;the UNTilted and TiLTed micrographs; these parameters will be used later for calculating a set of "predicted" coordinates
+;for the tilted particles that can be used to window portions of micrographs out to further refine the positions by CC.
+;
+;*************************************************************************************************************************
+;			x40 - micrograph size (X)
+;			x41 - micrograph size (Y)
+;			x65 - size of windows from micrographs used for AP SH
+;			x60 - top left coordinate in X for window to be used in AP SH - tilted micrograph
+;			x61 - top left coordinate in Y for window to be used in AP SH - tilted micrograph
+;			x34 - lower end of tilt angle to test
+;			x36 - upper end of tilt angle to test
+;			x38 - total number of tilt angles to test
+;			x91 - factor for decimation of windowed images
+;			x67 - size of windowed image after decimation
+;			x93 - stop-band for Butterworth low pass for initial micrograph alignment
+;			x94 - pass-band for Butterworth low pass for initial micrograph alignment
+;			x23 - lower end of angular range to be tested for untilted micrograph
+;			x24 - upper end of angular range to be tested for untilted micrograph
+;			x28 - total number of angles to be tested
+; 
+;		PARAMETERS for AP SH
+;
+;			x71 - translation search range
+;			x72 - step size
+;			x73 - last ring
+;
+;		PARAMETERS FOR BOXING PARTICLES FOR CROSS-CORRELATION
+;
+;			x75 - box size for windowing of particles from TLT micrograph for cross-correlation
+
+FR
+? tilted micrograph ?
+; <1> R{***x20}t
+
+FR
+? untilted micrograph ?
+; <2> R{***x20}u
+
+FR
+? File containing the tilt and rotation parameters used for the alignment ?
+; <3> unt_rot_search_params_{***x20}
+
+FR
+? AP SH output file ?
+; <4> apnq{***x20}
+
+FR
+? file containing alignment results--a combination of AP SH and the alignment parameters ?
+; <5> ugraph_align_results_{***x20}
+
+FR
+? DOC SORTed version of the previous file, sorted by CC coefficient?
+; <6> ugraph_align_results_by_CCC_{***x20}
+
+FR
+? debugging output -- stack with interpolated and rotated images?
+; <7> stack to be saved to disk
+
+FR
+? debugging output -- stack with interpolated and rotated images?
+; <8> stack to be saved to disk
+;
+;********************************************************************************************************************
+;
+;			x50 - micrograph center along X
+x50=INT(x40/2)
+;			x51 - micrograph center along Y
+x51=INT(x41/2)
+;			x60 - top left coordinate in X for window to be used in AP SH - tilted micrograph
+x60=x50-INT(x65/2)
+;			x61 - top left coordinate in Y for window to be used in AP SH - tilted micrograph
+x61=x51-INT(x65/2)
+;			x67 - size of windowed image after decimation
+x67=INT(x65/x91)
+;			x37 - angular step (for tilt)
+x37=(x36-x34+1)/x38
+;			x27 - angular "step"
+x27=(x24-x23+1)/x28
+;			x92 - frequency for FQ of image before decimation
+x92=1/(x91*x95*2)
+;			x55 - number of images to be placed in interpolated stack
+x55=x38*x28		;number of tilt angles to test * number of in-plane rot angles to test
+;			Pad to twice the size
+x44=INT(x67*2)
+;			
+;			ORIGIN after padding - WE have had issues in SPIDER with this parameter - GIVE DIRECT VALUE IN THIS SUBROUTINE IN CASE OF PROBLEMS
+x47=((x44-x67)/2) + 1
+;			x45- top left coordinates for padding
+;x45=INT(x44-x67)
+;
+;x45=x45/2
+; 
+;x45=x45+1
+;
+;			PARAMETERS for AP SH - WILL OVERRIDE THE VALUES FROM MAIN SCRIPT
+;
+;			TRANSLATION SEARCH RANGE + LAST RING < ((NSAM)/2 - 2)
+;			TRANSLATION SEARCH RANGE + LAST RING < (NSAM)/2 - 2
+;		STEP SIZE
+x72=8
+;		TRANSLATION SEARCH RANGE
+;
+x71=INT(0.2*x67)
+x71=INT(x71/x72)		;next two steps make sure that the search range is divisible by the step size
+x71=x71*x72
+;			x73 - last ring
+x73=64
+;
+;*********************************************************************************************************************
+;
+;		initialize counter
+x99=1
+;		make in-line stack for tilted micrograph
+MS
+_1@
+(x44,x44,1)
+(1)
+;		window out the center of the tilted micrograph to an in-line buffer
+WI
+<1>
+_5
+(x65,x65)
+(x60,x61)
+;		filter image (for decimation)
+FQ NP
+_5
+_4
+(1)
+(x92)
+;		decimate
+DC
+_4
+_5
+(x91,x91)
+;		apply a Butterworth high-pass filter to the decimated image
+FQ
+_5
+_4
+(8)
+(x86,x87)
+;		apply a Butterworth low-pass filter to the decimated image
+FQ
+_4
+_5
+(7)
+(x94,x93)
+;		pad the final image
+PD
+_5
+_1@001
+(x44,x44)
+Y
+(x47,x47)
+;		!!!!!!!!!!!!!!!!!!!!!!hard core values- pad wouldn't accept variables!!!!!!!!!!!!!!!!!!!!!!!!!!
+;		make a dummy angular file for AP SH
+x81=1		; key
+x82=0		; dummy angle value
+;
+SD x81,x82,x82,x82
+dummy_angles
+;		make in-line stack for untilted, interpolated micrograph
+MS
+_2@
+(x44,x44,1)
+(x55)
+;		LOOP OVER THETA (TILT) ANGLES USED FOR INTERPOLATION
+DO LB12 x29=1,x38
+;			caltulate tilt angle for this iteration
+x35=x34+x37*(x29-1)
+;			calculate x42 - INTERPOLATED micrograph size (X) after "tilting"
+x42=cos(x35)
+;                       if the angle was negative, the interpolation should SHRINK the micrograph
+IF(x35.LT.0.0)GOTO LB50
+;                       if the angle was positive, the interpolation should STRETCH the micrograph
+x42=2-x42
+;
+x42=x42*x40
+;
+GOTO LB51
+;
+LB50
+;                       calculate x42 - INTERPOLATED micrograph size (X) after "tilting"
+x42=x42*x40
+;
+LB51
+;			calculate x52 - micrograph center along X after interpolation
+x52=INT(x42/2)
+;			calculate x62 - top left coordinate in X (after interpolation) for window to be used in AP SH
+x62=x52-INT(x65/2)
+
+;		LOOP OVER ROTATION ANGLES APPLIED TO UNTILTED MICROGRAPH BEFORE INTERPOLATION
+;		SAVE WINDOWED CENTER OF INTERPOLATED IMAGES TO AN IN-LINE STACK
+;
+DO LB11 x19=1,x28
+;			calculate rotation angle for this iteration
+x22=x23+x27*(x19-1)
+;
+;		rotate the untilted micrograph in preparation for interpolation
+RT
+<2>
+_4
+(x22)
+;		interpolate the rotated, untilted micrograph to mimick the tilted one
+IP
+_4
+_3
+(x42,x41)
+;		window out the center of the interpolated micrograph
+WI
+_3
+_4
+(x65,x65)
+(x62,x61)
+;
+;		filter image (for decimation)
+FQ NP
+_4
+_5
+(1)
+(x92)
+;		decimate
+DC
+_5
+_4
+(x91,x91)
+;		apply a Butterworth high pass filter to the decimated image
+FQ
+_4
+_5
+(8)
+(x86,x87)
+;		apply a Butterworth low-pass filter to the decimated image
+FQ
+_5
+_4
+(7)
+(x94,x93)
+PD
+_4
+_2@{****x99}
+(x44,x44)
+Y
+(x47,x47)
+;
+;		save the tilt and in-plane rotation angle used for this iteration
+;		x99 - key and "reference" number
+;		x35 - tilt angle
+;		x22 - in-plane rotation angle before interpolation
+;
+SD x99,x99,x35,x22
+<3>
+x99=x99+1
+;
+LB11
+;
+LB12
+;
+SD E
+<3>
+;
+MD
+SET MP
+(4)
+
+;		RUN AP SH between the two windowed fragments
+AP SH
+_1@****
+(1-1)
+(x71,x72)
+(1,x73)
+dummy_angles
+_2@****
+(1-x55)
+*
+(0.0)
+(0)
+<4>
+
+
+;		combine AP SH output with the information on tilt and in-plane rotation angles
+UD N x66
+<4>
+
+DO LB3 x39=1,x66
+;			x11 - Euler angle of reference (meaningless here)
+;			x12 - Euler angle of reference (meaningless here)
+;			x13 - Euler angle of reference (meaningless here)
+;			x14 - number of matching reference (meaningless here)
+;			x15 - Projection number (number of transformed ugraph that was matched)
+;			x16 - Cumulative in-plane rotation (PSI)
+;			x17 - Cumulative X shift
+;			x18 - Cumulative Y shift
+;			x31 - Number of projections searched
+;			x31 - Angular change for projection
+;			x32 - Not normalized cross-correlation coefficient
+;
+UD IC x39,x11,x12,x13,x14,x15,x16,x17,x18,x31,x31,x32
+<4>
+
+UD IC x39,x99,x35,x22
+<3>
+;			x39 - key mirror
+;			x35 - tilt angle (THETA)
+;			x22 - in-plane rotation angle before interpolation
+;			x32 - Not normalized cross-correlation coefficient
+;			x16 - Cumulative in-plane rotation (PSI)
+;			x17 - Cumulative X shift
+;			x18 - Cumulative Y shift
+;
+SD x39,x39,x35,x22,x32,x16,x17,x18
+<5>
+
+LB3
+
+;		sort the full output from the micrograph alignment by CC coefficient
+DOC SORT
+<5>
+<6>
+(4)
+YES
+
+
+UD ICE
+<4>
+UD ICE
+<3>
+SD E
+<5>
+
+
+CP
+_2@
+<7>@
+
+CP
+_1@
+<8>@
+
+RE
+

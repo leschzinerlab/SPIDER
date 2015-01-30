@@ -1,0 +1,39 @@
+;p.combine_select_docs.spi
+;
+;This procedure is part of the batch that will pick the tilted particles from a set of tilt pairs using the coordinates
+;determined from picking only the untilted particles. This procedure will combine the UNT and TLT select files created by
+;the "p.find_outlying_particles.spi" procedure to generata a final select file containing the numbers for those particles
+;that will be withing the boundary for BOTH the UNT and TLT versions.
+;
+;**********************************************************************************************************************
+;
+FR
+? particle numbers for those UNT within boundary ?
+; <1> select_unt_particles_inside_{***x20}
+
+FR
+? particle numbers for those TLT within boundary ?
+; <2> select_tlt_particles_inside_{***x20}
+
+FR
+? particle numbers for those within boundary in BOTH ?
+; <3> select_unt_tlt_particles_inside_{***x20}
+
+;**********************************************************************************************************************
+
+;			combine the two select doc files to generate a new select doc file containing those particle
+;			numbers present in BOTH input files
+DOC AND
+<1>
+<2>
+tmp
+1
+
+DOC REN
+tmp
+<3>
+
+DE
+tmp
+;
+RE

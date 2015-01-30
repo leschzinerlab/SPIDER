@@ -1,0 +1,186 @@
+[x40,x41,x50,x51,x91]  
+;calculate_initial_tlt_coords.spi
+;
+;This procedure is part of the batch that will pick the tilted particles from a set of tilt pairs using the coordinates
+;determined from picking only the untilted particles. It will apply the alignment parameters obtained previously,
+;corresponding to the tilt angle and the two tilt axis angles, to the particle positions from the UNT micrograph to 
+;obtain an initial set of rough coordinates that can be used to refine the positions.
+;
+;*************************************************************************************************************************
+;
+;x40 - micrograph size in X
+;x41 - micrograph size in Y
+;x50 - micrograph center along X
+;x51 - micrograph center along Y
+;x91 - decimation factor used for the images created by AP NQ
+
+
+FR
+? file containing parameters from alignment of micrographs in tilt pair ?
+; <1> ugraph_align_results
+
+FR
+? DOC SORTed version of the previous file, sorted by CC coefficient?
+; <2> ugraph_align_results_by_CCC
+
+FR
+? File containing coordinates for the UNTilted particles?
+; <3> dcu373
+
+FR
+? test output for trigonometry ?
+; <4> initial_tlt_coordinates
+
+FR
+? test output with coordinates relative to Spider origin ?
+; <5> test_Spider_coordinates
+
+;*********************************************************************************************************************
+
+;		sort the full output from the micrograph alignment by CC coefficient
+DOC SORT
+<1>
+<2>
+(4)
+YES
+;		retrieve the values from the last line (highest CC coefficient) and assign alignment parameters
+;		to variables
+UD N x66
+<2>
+;		x35 - tilt (theta) angle
+;		x36 - in-plane rotation (before tilting) for UNT micrograph
+;		x97 - cross-correlation coefficient		
+;		x37 - in-plane rotation for TLT micrograph from AP NQ
+;		x38 - X shift between UNT and TLT
+;		x39 - Y shift between UNT and TLT
+;
+UD S x66,x11,x35,x36,x97,x37,x38,x39
+<2>
+;		the in-plane rotation angle for the TLT micrograph must have its sign flipped as we're going from
+;		UNT to TLT
+;		COMMENTED OUT THE FOLLOWING LINE
+;x37=-x37
+;		the shifts obtained by AP NQ correspond to the decimated images used for the alignment. Therefore,
+;		these shifts must be multiplied by the decimation factor (x91)
+x38=x38*x91
+x39=x39*x91
+;		APPLY ALIGNMENT PARAMETERS TO UNTILTED PARTICLES COORDINATES
+;
+;		find out how many particles are in the untilted micrograph
+UD N x66
+<3>
+;		loop over all particles in the file
+;
+DO LB21 x19=1,x66
+;
+;		get coordinates
+;		x19 - key
+;		x97 - particle number (same as key)
+;		x11 - X coordinate
+;		x12 - Y coordinate
+;		*** NOTE: These variables apply to dcu*** files created by WEB and must be adjusted for other formats ***
+;
+UD IC x19,x97,x11,x12
+<3>
+;		convert particle coordinates to coordinates relative to center of micrograph
+;		x21 - new X coordinate
+;		x22 - new Y coordinate
+x21=x11-x50
+x22=x12-x51
+;		TEMP-save
+;SD x19,x21,x22
+;<4>
+;		### TRANSFORMATION 1 ###
+;
+;		the rotational search for the position of the tilt axis resulted in an angle that leads to X and Y
+;		components for both the X and Y coordinates of each picked particle in UNT
+;
+;		calculate components for the X coordinate
+;		x11 - component on X
+;		x13 - component on Y
+x11=x21*cos(x36)
+x13=x21*sin(x36)
+;		calculate components for the Y coordinate
+;		x12 - component on Y
+;		x14 - component on X
+x12=x22*cos(x36)
+x14=x22*sin(x36)
+;		combine the X and Y components into a new set of X, Y coordinates
+;		x21 - new X coordinate
+;		x22 - new Y coordinate
+x21=x11+x14
+x22=x12-x13
+;		TEMP-save
+;SD x19,x21,x22
+;<4>
+;		### TRANSFORMATION 2 ###
+;		The coordinates along X will either be shrunk or expanded based on whether tiltangle > or < 0.The Y 
+;		coordinate is along the tilt axis
+IF(x35.LT.0.0)GOTO LB50
+;
+;		Deals with expansion where tilt angle is > 0
+x42=cos(x35)
+;
+x42=2-x42
+;
+x21=x21*x42
+;
+GO TO LB51
+LB50
+;		The coordinates along X should now be "shrunk" to account for the interpolation involved in the "tilting"
+;		of the UNT micrograph during alignment with the TLT one. The Y coordinate is along the tilt axis and thus
+;		unaffected
+;
+x21=x21*cos(x35)
+;                       
+LB51
+;
+;		### TRANSFORMATION 3 ###
+;
+;		We must now deal with the angle actually determined by AP NQ; this is the alignment between the rotated,
+;		interpolated UNT micrograph and its TLT mate. This transformation should be similar to the one done above.
+;
+;		calculate components for the X coordinate
+;		x11 - component on X
+;		x13 - component on Y
+x11=x21*cos(x37)
+x13=x21*sin(x37)
+;		calculate components for the Y coordinate
+;		x12 - component on Y
+;		x14 - component on X
+x12=x22*cos(x37)
+x14=x22*sin(x37)
+;		combine the X and Y components into a new set of X, Y coordinates
+;		x21 - new X coordinate
+;		x22 - new Y coordinate
+x21=x11+x14
+x22=x12-x13
+;		TEMP-save
+;SD x19,x21,x22
+;<4>
+;
+;		### TRANSFORMATION 4 ###
+;
+;		Finally, the X- and Y-shifts obtained by AP NQ between the rotated, interpolated UNT and the TLT
+;		micrograph must be added to the particle coordinates calculated so far.
+x21=x21+x38		;add X-shift
+x22=x22+x39		;add Y-shift
+;
+;		SAVE THE NEW PARTICLE COORDINATES
+SD x19,x19,x21,x22
+<4>
+;		as a test, save some coordinates expressed relative to origin of image (Spider origin)
+x21=x21+x50
+x22=x22+x51
+SD x19,x19,x21,x22
+<5>
+
+LB21
+;
+UD ICE
+<3>
+SD E
+<4>
+;
+RE
+

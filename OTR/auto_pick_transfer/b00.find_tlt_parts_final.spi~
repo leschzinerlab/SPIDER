@@ -1,0 +1,331 @@
+;b00.find_tlt_parts.spi
+;
+;This batch is an attempt at "automating" the picking of the tilted mates from tilt pair micrographs. The idea is to
+;find first the rotational and translational parameters between the two micrographs in the tilt pair and then use those
+;parameters to "cut out", for each particle alredy picked in the untilted micrograph (with Boxer, for example) an area 
+;of the tilted micrograph where the corresponding particle is expected to be. The position of the tilted particle can 
+;then be determined by doing a cross-correlation using the untilted particle as reference.
+;
+;*********************************************************************************************************************
+;
+;				VARIABLES
+;
+;		PARAMETERS FOR INITIAL ALIGNMENT OF MICROGRAPHS
+;
+;			x40 - micrograph size (X)
+x40=4096
+;			x41 - micrograph size (Y)
+x41=4096
+;			x50 - micrograph center along X
+x50=INT(x40/2)
+;			x51 - micrograph center along Y
+x51=INT(x41/2)
+;			x65 - size of windows from micrographs used for AP SH
+;			X65 CAN BE INCREASED TO INCLUDE THE WHOLE MICROGRAPH IN CASES OF LOW OVERLAP BETWEEN TILT PAIRS - MORE COMPUTATION TIME
+;			When you increase search window use p.apshPdv2 subroutine instead of p.apshPdv1
+x65=3600
+;			x35 - tilt angle
+x35 = 90
+;			x34 - lower end of tilt angle to test
+x34=-4
+;			x36 - upper end of tilt angle to test
+x36=4
+;			x38 - total number of tilt angles to test
+x38=9
+;			x42 - INTERPOLATED micrograph size (Y) after "tilting"
+x42=cos(x35)*x41
+;			x52 - micrograph center along Y after interpolation
+x52=INT(x42/2)
+;			x62 - top left coordinate in Y for window to be used in AP SH - interpolated micrograph
+x62=x52-INT(x65/2)
+;			x95 - pixel size (A) of original data
+x95=1.72
+;			x91 - factor for decimation of windowed images
+x91=12
+;			x67 - size of windowed image after decimation
+x67=INT(x65/x91)
+;			x46 - resolution (in A) for stop-band for Butterworth filters
+x46=45
+;			x47 - resolution (in A) for pass-band for Butterworth filters
+x47=65
+;			x56 - resolution (in A) for stop-band for high-pass Butterworth filter
+x56=950
+;			x57 - resolution (in A) for pass-band for high-pass Butterworth filter
+x57=750
+;			x96 - stop-band for Butterworth high pass for refinement of coordinates
+x96=x95/x56
+;			x97 - pass-band for Butterworth high pass for refinement of coordinates
+x97=x95/x57
+;			x83 - stop-band for Butterworth low pass for refinement of coordinates
+x83=x95/x46
+;			x84 - pass-band for Butterworth low pass for refinement of coordinates
+x84=x95/x47
+;			x93 - stop-band for Butterworth low pass for initial micrograph alignment
+x93=(x91*x95)/x46
+;			x94 - pass-band for Butterworth low pass for initial micrograph alignment
+x94=(x91*x95)/x47
+;			x86 - stop-band for Butterworth high pass for intital micrograph alignment
+x86=(x91*x95)/x56
+;			x87 - pass-band for Butterworth high pass for intitial micrograph alignment
+x87=(x91*x95)/x57
+;			x23 - lower end of angular range to be tested for untilted micrograph
+x23=-5
+;			x24 - upper end of angular range to be tested for untilted micrograph
+x24=5
+;			x28 - total number of angles to be tested
+x28=11
+; 
+;***********************************APSH PARAMETERS****************************************************************
+;IN CASE OF p.apshPdv2.spi these parameters  will  be over ridden and we will use the subroutine parameters
+;
+;
+;		PARAMETERS 
+;
+;			TRANSLATION SEARCH RANGE + LAST RING < (NSAM)/2 - 2
+;		STEP SIZE
+x72=4
+;		TRANSLATION SEARCH RANGE
+;
+x71=INT(0.4*x67)
+x71=INT(x71/x72)		;next two steps make sure that the search range is divisible by the step size
+x71=x71*x72
+;			x73 - last ring
+x73=INT(x44/2)-3-x71
+;
+;		PARAMETERS FOR BOXING PARTICLES FOR CROSS-CORRELATION
+;
+;			x74 - box size that will be used for the final windowed particles (i.e. for data processing). This parameter
+;				will be used for dealing with particles that are too close to the edge of the image to be windowed
+;				using the larger x75 size (used to increase the area for CC). Therefore, while it is OK to end up using
+;				a window size SMALLER than x74 later on when extracting the particles, one CANNOT use a larger one.
+x74=200
+;			x75 - box size for windowing of particles from TLT micrograph for cross-correlation
+x75=200
+;			x26 - Radius of the mask that will be used on the reference ("UNT") particle in the refinement of the 
+;				"TLT" particle's coordinates. This radius is expressed as a fraction of the box size x75
+x26=0.8
+;*********************************************************************************************************************
+;
+;	PART 0 - THIS IS A PRELIMINARY STEP THAT WILL CHECK HOW LARGE IS THE DISPLACEMENT BETWEEN THE TWO 
+;		IMAGES IN A PAIR. BECAUSE THE MAXIMUM ALLOWED SHIFT FOR AP SH IS 0.4X THE IMAGE SIZE, WE
+;		NEED TO DEAL SEPARATELY WITH THOSE CASES WHERE THE DISPLACEMENT IS LARGER THAN THAT. WE WILL
+;		START BY CHECKING THE DISPLACEMENT WITH A CROSS-CORRELATION AND THEN USE A VERSION OF THE ALIGNMENT
+;		PROCEDURE THAT USES PADDING FOR THOSE CASES WHERE THE DISPLACEMENT IS TOO LARGE.
+;
+;.....................................................................................................................
+
+x20=286 		;micrograph number; eg image_00286_01.spi and image_00286_00.spi
+
+;
+;		LOOP OVER ALL MICROGRAPH PAIRS
+;DO LB1 x19=1,1
+;		read micrograph numbers
+;RR x20
+;286,288,289,290,293,294,295,296,297,298,299,300,20,38,89,109,190,291,292
+;
+;		get the total number of micrographs (instead of doing read register as above)
+;UD N, x49
+;../DATA/EXOSOME/BATCH_OUTPUT/list_ugraph
+;		read micrograph numbers from list_ugraph
+;DO LB1 x19=1,x49
+;UD IC, x19, x20
+;../DATA/EXOSOME/BATCH_OUTPUT/list_ugraph
+;
+;		x19 - iteration number
+;		x40 - micrograph size (X)
+;		x41 - micrograph size (Y)
+;		x65 - size of windows from micrographs used to check overlap
+;		x71 - translation search range for AP SH
+;		x91 - factor for decimation of windowed images
+;		x86 - stop-band for Butterworth high pass for intital micrograph alignment
+;		x87 - pass-band for Butterworth high pass for intitial micrograph alignments
+;		x93 - stop-band for Butterworth low pass for initial micrograph alignment
+;		x94 - pass-band for Butterworth low pass for initial micrograph alignment
+;		x95 - pixel size (A) of original data
+;
+;
+;	PART I - USE AP SH TO FIND THE ROTATIONAL AND TRANSLATIONAL PARAMETERS BETWEEN THE TWO MICROGRAPHS
+;		IN THE TILT PAIR. "COMPRESS" THE UNTILTED ONE ACCORDING TO THE TILT GEOMETRY. A 
+;		LIMITED ROTATIONAL SEARCH IS DONE PRIOR TO THE INTERPOLATION OF THE UNTILTED UGRAPH
+;
+;.....................................................................................................................
+;
+;		x40 - micrograph size (X)
+;		x41 - micrograph size (Y)
+;		x65 - size of windows from micrographs used for AP SH
+;		x60 - top left coordinate in X for window to be used in AP SH - tilted micrograph
+;		x61 - top left coordinate in Y for window to be used in AP SH - tilted micrograph
+;		x34 - lower end of tilt angle to test
+;		x36 - upper end of tilt angle to test
+;		x38 - total number of tilt angles to test
+;		x91 - factor for decimation of windowed images
+;		x67 - size of windowed image after decimation
+;		x92 - frequency for FQ of image before decimation
+;		x93 - stop-band for Butterworth low pass for initial micrograph alignment
+;		x94 - pass-band for Butterworth low pass for initial micrograph alignment
+;		x86 - stop-band for Butterworth high pass for intital micrograph alignment
+;		x87 - pass-band for Butterworth high pass for intitial micrograph alignments
+;		x95 - pixel size (A) of original data
+;		x23 - lower end of angular range to be tested for untilted micrograph
+;		x24 - upper end of angular range to be tested for untilted micrograph
+;		x28 - total number of angles to be tested
+;		x55 - number of images to be placed in interpolated stack
+; 
+;		PARAMETERS for AP SH
+;
+;		x71 - translation search range
+;		x72 - step size
+;		x73 - last ring
+;
+;		PARAMETERS FOR BOXING PARTICLES FOR CROSS-CORRELATION
+;
+;		x75 - box size for windowing of particles from TLT micrograph for cross-correlation
+;
+; USE p.apshPdv2 IF YOU WANT TO USE LARGER WINDOW SIZE IN APSH SEARCH
+; USEFUL WHEN THE OVERLAP BETWEEN TILTED MICROGAPHS ARE LOW
+;
+;!!!!!!!In apshPdv2.spi we have had issues in SPIDER with the parameter x47 (ORIGIN after padding) 
+;GIVE DIRECT VALUE IN p.apshPdv2 SUBROUTINE IN CASE OF PROBLEMS!!!!!!!!!!!!
+;
+@p.apshPdv2[x40,x41,x65,x34,x36,x38,x91,x93,x94,x86,x87,x95,x23,x24,x28,x72,x75]
+image_{*****x20}_01					;tilted micrograph -- INPUT
+image_{*****x20}_00					;untilted micrograph -- INPUT
+output/unt_rot_search_params_{*****x20}		;tilt and rotation parameters used for the alignment -- OUTPUT
+output/apsh_{*****x20}				;AP SH output file -- OUTPUT
+output/ugraph_align_results_{*****x20}		;file containing alignment results--a combination of AP SH and the alignment parameters -- 
+output/ugraph_align_results_by_CCC_{*****x20}	;sorted alignment files -- OUTPUT
+output/untilted_refs_{***x20}				;file to debug -- contains the padded interpolated and rotated images from untilted micrograp
+output/tilted_ref_{***x20}
+
+;*********************************************************************************************************************
+;
+;	PART II - GET THE ALIGNMENT PARAMETERS CREATED IN PART I AND USE THOSE TO "ROTATE" THE COORDINATES FROM
+;		THE UNTILTED MICROGRAPH TO THE TILTED FRAME OF REFERENCE TO GET AN INITIAL SET OF
+;				"PREDICTED" COORDINATES FOR THE TILTED PARTICLES
+;
+
+;.....................................................................................................................
+
+
+;		x40 - micrograph size in X
+;		x41 - micrograph size in Y
+;		x50 - micrograph center along X
+;		x51 - micrograph center along Y
+;
+;
+
+@p.calculate_initial_tlt_coords_X_apsh[x40,x41,x50,x51,x91]
+output/ugraph_align_results_{*****x20}		; -- INPUT
+output/ugraph_align_results_by_CCC_{*****x20}	; -- OUTPUT
+coordinates_micrograph_{***x20}			; -- INPUT
+output/initial_tlt_coordinates_{*****x20}		; -- OUTPUT
+output/test_Spider_coordinates_{*****x20}		; -- OUTPUT
+
+;*********************************************************************************************************************
+;
+;	PART III - CHANGE THE COORDINATES FOR THE UNTILTED PARTICLES WITH THE CENTER OF THE MICROGRAPH AS THE ORIGIN
+;			THIS IS TO PREPARE THEM FOR THE FOLLOWING STEP
+;
+;.....................................................................................................................
+
+;		x50 - micrograph center along X
+;		x51 - micrograph center along Y
+; 
+
+@p.change_image_origin[x50,x51]
+coordinates_micrograph_{***x20}			;coordinates for UNT particles -- INPUT
+output/dcu{*****x20}_centorigin			;coordinates for UNT particles with origin at center -- OUTPUT
+
+;*********************************************************************************************************************
+;
+;	PART IV - FIND OUT THOSE SETS OF COORDINATES THAT WOULD RESULT IN BOXES FALLING OUTSIDE THE UNT MICROGRAPH
+;			DURING WINDOWING FOR THE REFINEMENT OF PARTICLE POSITIONS
+;
+;.....................................................................................................................
+
+
+;		x74 - intended final box size for windowing of particles
+;		x40 - micrograph size in X
+;		x41 - micrograph size in Y
+;		x50 - micrograph center along X
+;		x51 - micrograph center along Y
+
+
+
+
+@p.find_outlying_particles-AL[x74,x40,x41,x50,x51]
+output/dcu{*****x20}_centorigin			;coordinates for UNT particles -- INPUT
+output/select_unt_particles_inside_{*****x20}		;particle numbers for those within boundary -- OUTPUT
+output/unt_coordinates_{*****x20}_inside			;coordinates for UNT particles within boundary -- OUTPUT
+
+
+;*********************************************************************************************************************
+;
+;	PART V - FIND OUT THOSE SETS OF COORDINATES THAT WOULD RESULT IN BOXES FALLING OUTSIDE THE TLT MICROGRAPH
+;			DURING WINDOWING FOR THE REFINEMENT OF PARTICLE POSITIONS
+;
+;.....................................................................................................................
+
+
+;		x74 - intended final box size for windowing of particles
+;		x40 - micrograph size in X
+;		x41 - micrograph size in Y
+;		x50 - micrograph center along X
+;		x51 - micrograph center along Y
+
+
+
+@p.find_outlying_particles-AL[x74,x40,x41,x50,x51]
+output/initial_tlt_coordinates_{*****x20}			;coordinates for TLT particles -- INPUT
+output/select_tlt_particles_inside_{*****x20}		;particle numbers for those within boundary -- OUTPUT
+output/initial_tlt_coordinates_{*****x20}_inside		;coordinates for TLT particles within boundary -- OUTPUT
+
+
+;*********************************************************************************************************************
+;
+;	PART VI - COMBINE THE SELECT FILES GENERATED FOR THE UNT AND TLT PARTICLES TO CREATE A SINGLE ONE CONTAINING
+;		THE NUMBERS OF THOSE PARTICLES THAT ARE WITHIN THE BOUNDARIES FOR BOTH THE UNT AND TLT MICROGRAPH
+;.....................................................................................................................
+
+@p.combine_select_docs
+output/select_unt_particles_inside_{*****x20}		;particle numbers for those UNT within boundary -- INPUT
+output/select_tlt_particles_inside_{*****x20}		;particle numbers for those TLT within boundary -- INPUT
+output/select_unt_tlt_particles_inside_{*****x20}	;particle numbers for those within boundary in BOTH -- OUTPUT
+
+
+;*********************************************************************************************************************
+;
+;	PART VII - USE THE SET OF INITIAL COORDINATES TO WINDOW SECTIONS OF THE TLT MICROGRAPH EXPECTED TO CONTAIN THE
+;			TLT PARTICLES AND USE CROSS-CORRELATION TO FIND THE FINAL COORDINATES
+;
+;.....................................................................................................................
+
+;		x74 - intended final box size for windowing of particles
+;		x75 - box size for windowing of particles from TLT micrograph for cross-correlation
+;		x40 - micrograph size in X
+;		x41 - micrograph size in Y
+;		x50 - micrograph center along X		
+;		x51 - micrograph center along Y
+;		x83 - stop-band for Butterworth low pass for refinement of coordinates
+;		x84 - pass-band for Butterworth low pass for refinement of coordinates
+;		x96 - stop-band for Butterworth high pass for refinement of coordinates
+;		x97 - pass-band for Butterworth high pass for refinement of coordinates
+;		x26 - mask radius for UNT reference for the cross-correlation (as fraction of bull box size x75)
+
+@p.refine_041008[x74,x75,x40,x41,x50,x51,x83,x84,x96,x97,x26]
+image_{*****x20}_00						;untilted micrograph -- INPUT
+image_{*****x20}_01						;tilted micrograph -- INPUT
+coordinates_micrograph_{***x20}						;particle coordinates for UNT micrograph -- INPUT
+output/initial_tlt_coordinates_{*****x20}			;initial coordinates for TLT micrograph -- INPUT
+output/ugraph_align_results_by_CCC_{*****x20}			;micrograph alignment parameters -- INPUT
+output/select_unt_tlt_particles_inside_{*****x20}			;select file of particle pairs where BOTH particles are within boundaries -- INPUT
+output/final_tlt_coordinates_{*****x20}				;final TLT coordinates for windowing
+output/shifts_CC_{*****x20}					;shifts and CC coefficient from CC N/PK
+output/particle_boxsize_{*****x20}					;document containing particle number and its box size
+output/final_unt_coordinates_{*****x20}
+
+;LB1
+
+EN D
+
+

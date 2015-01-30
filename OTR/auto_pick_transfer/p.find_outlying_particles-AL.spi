@@ -1,0 +1,92 @@
+[x74,x40,x41,x50,x51]
+;find_outlying_particles.spi
+;
+;This procedure is part of the batch that will pick the tilted particles from a set of tilt pairs using the coordinates
+;determined from picking only the untilted particles. It will go through the newly created initial set of particle 
+;coordinates and determine which ones would go beyond the edge of the TLT micrograph once they're inside the box that
+;will be used later to determine their precise position by cross-correlation.
+;
+;**********************************************************************************************************************
+;
+;x74 - intended final box size for windowing of particles
+;x40 - micrograph size in X
+;x41 - micrograph size in Y
+;x50 - micrograph center along X
+;x51 - micrograph center along Y
+;
+x98=1
+x99=1
+
+
+FR
+? file containing UNT or TLT particle coordinates obtained previously ?
+; <1> initial_tlt_coordinates or dcu***
+
+FR
+? output file containing the numbers for the particles that will be within the boundary in the UNT or TLT image ?
+; <2> select_unt_tlt_particles_inside
+
+FR
+? File containing coordinates for the UNT or TLT particles that will be within the boundary ?
+; <3> initial_tlt_coordinates_inside
+
+;**********************************************************************************************************************
+;
+;		CALCULATE X AND Y VALUES FOR THE BOUNDARY THAT WILL DETERMINE WHICH PARTICLES ARE OUTLIERS
+;
+;		x25 - Half the box size
+x25=INT(x74/2)
+;		x30 - lower X boundary
+;		x31 - upper X boundary
+;		x32 - lower Y boundary
+;		x33 - upper Y boundary
+;		add a one pixel margin to each boundary
+x30=-x50+x25+1
+x31=x50-x25-1
+x32=-x51+x25+1
+x33=x51-x25-1
+;		Now loop over all particles (= sets of coordinates) in the file created before to check for
+;		outliers.
+;
+;		Find out how many particles there are
+UD N x66
+<1>
+;		Loop over all of them
+;
+DO LB1 x19=1,x66
+;
+;		retrieve coordinates
+;		x21 - X coordinate
+;		x22 - Y coordinate
+;
+UD IC x19,x29,x21,x22
+<1>
+;		check if these coordinates violate any of the boundaries set above
+;
+IF(x21.LT.x30)GOTO LB1
+IF(x21.GT.x31)GOTO LB1
+IF(x22.LT.x32)GOTO LB1
+IF(x22.GT.x33)GOTO LB1
+;
+;		if no boundary was breached, the particle is INSIDE and can be used - save particle number 
+;		(for the UNT set) as well as the coordinates for the TLT ones.
+;
+SD x98,x29
+<2>
+x98=x98+1
+;
+SD x99,x29,x21,x22
+<3>
+x99=x99+1
+;
+LB1
+;
+UD ICE
+<1>
+SD E
+<2>
+SD E
+<3>
+;
+RE
+
