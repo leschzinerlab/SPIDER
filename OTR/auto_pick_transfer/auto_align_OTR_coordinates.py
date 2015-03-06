@@ -85,8 +85,17 @@ def spi_to_box(spifile1,boxsize,outbox1,spifile2,outbox2):
 		line1 = l1.split()
 		line2 = l2.split()
 
+		if len(l1) == 0:
+			i = i + 1
+			continue
+
+		print l1
+		print len(l1)
+		print l1[1]
+	
                 if l1[1] == ";":
-                        i = i + 1
+                        print l1[1]
+			i = i + 1
 			continue
 
                 x1 = float(line1[3])-boxsize/2
@@ -103,6 +112,9 @@ def spi_to_box(spifile1,boxsize,outbox1,spifile2,outbox2):
 
 		i = i + 1
 
+	o1.close()
+	o2.close()
+
 #==============================
 if __name__ == "__main__":
 
@@ -118,19 +130,40 @@ if __name__ == "__main__":
 	#Create list of untilted micrographs
 	microlist = glob.glob(params['micros'])
 
+	if params['debug'] is True:
+		print microlist
+
 	#Copy spider scripts to your output directorysubprocess.Popen(cmd,shell=True).wait()
 	cmd = 'cp %s/*.spi .' %(pathtoscripts)
 	subprocess.Popen(cmd,shell=True).wait()
+
+	cmd = 'cp %s/boxer_to_spi.py .' %(pathtoscripts)
+        subprocess.Popen(cmd,shell=True).wait()
+
+	i = 1
 	
 	for untiltedmicro in microlist: 
 
+		if params['debug'] is True:
+			print 'Untilted micro = %s' %(untiltedmicro)
+	
 		ext = untiltedmicro[-6:][:-4]
 
 		#Create .box file name by removing extension
 		untiltedbox = '%s.box' %(untiltedmicro[:-4])
 		untiltedbox_out = '%s_align.box' %(untiltedmicro[:-4])
 
-		#Check to see that untilted box file exists
+		if params['debug'] is True:
+			print 'Untilted box = %s' %(untiltedbox)
+
+		if not os.path.exists(untiltedbox):
+			continue
+
+		if os.path.getsize(untiltedbox) == 0:
+			print 'No particles in %s. Skipping.' %(untiltedbox) 
+			continue
+
+		#Check to see that untilted box file doesn't exist
 		if os.path.exists(untiltedbox_out):
 			print 'Error: Box file %s exists. Skipping micrograph %s' %(untiltedbox_out,untiltedmicro)
 			continue
@@ -143,7 +176,18 @@ if __name__ == "__main__":
 		if ext == '01': 
 			tiltmicro = untiltedmicro.replace('01.mrc','00.mrc')
 			tiltbox = untiltedmicro.replace('01.mrc','00_align.box')
+
+		if os.path.exists(tiltbox):
+                        print 'Error: Box file %s exists. Skipping micrograph %s' %(tiltbox,tiltmicro)
+                        continue
 	
+		if params['debug'] is True:
+			print 'Tilted micro = %s' %(tiltmicro)
+
+		if not os.path.exists(tiltmicro):
+			print 'Tilted micro %s doesnt exist, skipping' %(tiltmicro)
+			continue
+
 		#Create .spi files from .mrc inputs and normalize
 		cmd = 'e2proc2d.py %s image_00286_01.spi --outtype spidersingle --process normalize' %(tiltmicro)
 		if params['debug'] is True:
@@ -167,17 +211,25 @@ if __name__ == "__main__":
 		subprocess.Popen(cmd,shell=True).wait()
 
 		#Convert spi files into box format
-		spi_to_box('output/final_tlt_coordinates_00286.spi',boxsize,tiltbox,'output/final_unt_coordinates_00286.spi',untiltedbox_out)
+		#spi_to_box('output/final_tlt_coordinates_00286.spi',boxsize,tiltbox,'output/final_unt_coordinates_00286.spi',untiltedbox_out)
+
+		cmd = './boxer_to_spi.py %s' %(str(boxsize))
+		subprocess.Popen(cmd,shell=True).wait()
+
+		shutil.move('output/final_tlt_coordinates_00286_out.box',tiltbox)
+		shutil.move('output/final_unt_coordinates_00286_out.box',untiltedbox_out) 
 
 		#Copy apsh file
-		cmd = 'output/apsh_00286.spi %s_apsh.spi' %(untiltedbox_out[:-4])
+		cmd = 'cp output/apsh_00286.spi %s_apsh.spi' %(untiltedbox_out[:-4])
 		subprocess.Popen(cmd,shell=True).wait()
 
 		#Clean up
 		cmd = 'rm -r output _10.spi coordinates_micrograph_286.spi dummy_angles.spi image_00286_00.spi image_00286_01.spi' 
 		subprocess.Popen(cmd,shell=True).wait()
 
+		i = i + 1
+	
 	#Final clean up
-	cmd = 'rm p.* b00.find_tlt_parts_final.spi'
+	cmd = 'rm boxer_to_spi.py p.* b00.find_tlt_parts_final.spi'
 	subprocess.Popen(cmd,shell=True).wait()
 	

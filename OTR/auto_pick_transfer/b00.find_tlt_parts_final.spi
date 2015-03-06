@@ -15,7 +15,7 @@
 ;			x40 - micrograph size (X)
 x40=4096
 ;			x41 - micrograph size (Y)
-x41=4096
+x41=x40
 ;			x50 - micrograph center along X
 x50=INT(x40/2)
 ;			x51 - micrograph center along Y
@@ -27,11 +27,11 @@ x65=3600
 ;			x35 - tilt angle
 x35 = 90
 ;			x34 - lower end of tilt angle to test
-x34=-5
+x34=-4
 ;			x36 - upper end of tilt angle to test
-x36=5
+x36=4
 ;			x38 - total number of tilt angles to test
-x38=11
+x38=9
 ;			x42 - INTERPOLATED micrograph size (Y) after "tilting"
 x42=cos(x35)*x41
 ;			x52 - micrograph center along Y after interpolation
@@ -69,11 +69,11 @@ x86=(x91*x95)/x56
 ;			x87 - pass-band for Butterworth high pass for intitial micrograph alignment
 x87=(x91*x95)/x57
 ;			x23 - lower end of angular range to be tested for untilted micrograph
-x23=-8
+x23=-5
 ;			x24 - upper end of angular range to be tested for untilted micrograph
-x24=8
+x24=5
 ;			x28 - total number of angles to be tested
-x28=17
+x28=11
 ; 
 ;***********************************APSH PARAMETERS****************************************************************
 ;IN CASE OF p.apshPdv2.spi these parameters  will  be over ridden and we will use the subroutine parameters
@@ -98,7 +98,7 @@ x73=INT(x44/2)-3-x71
 ;				will be used for dealing with particles that are too close to the edge of the image to be windowed
 ;				using the larger x75 size (used to increase the area for CC). Therefore, while it is OK to end up using
 ;				a window size SMALLER than x74 later on when extracting the particles, one CANNOT use a larger one.
-x74=350
+x74=200
 ;			x75 - box size for windowing of particles from TLT micrograph for cross-correlation
 x75=200
 ;			x26 - Radius of the mask that will be used on the reference ("UNT") particle in the refinement of the 
