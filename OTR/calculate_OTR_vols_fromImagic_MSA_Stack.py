@@ -12,11 +12,9 @@ import time
 #=========================
 def setupParserOptions():
         parser = optparse.OptionParser()
-        parser.set_usage("%prog --stack=<mergedImagicStack> --orig=<origStack> --info=<mergedInfoFile> --output=<folder> --angle=<angle> --apix=<apix> --lp=<lp> --radius=<rad>")
+        parser.set_usage("%prog --stack=<mergedImagicStack> --info=<mergedInfoFile> --output=<folder> --angle=<angle> --apix=<apix> --radius=<rad>")
         parser.add_option("--stack",dest="stack",type="string",metavar="FILE",
                 help="Aligned merged stack with combined +/- tilts from MSA-MRA")
-	parser.add_option("--orig",dest="orig",type="string",metavar="FILE",
-                help="Original merged imagic stack")
 	parser.add_option("--info",dest="info",type="string",metavar="FILE",
                 help="Corresponding merged tilt-info file for each particle")
 	parser.add_option("--output",dest="folder",type="string", metavar="STRING",
@@ -25,11 +23,11 @@ def setupParserOptions():
                 help="Approximate tilt angle for 'untilted' particles (first half of the merged stack) (e.g. 45)")
 	parser.add_option("--apix",dest="apix",type="float", metavar="FLOAT",
                 help="Pixel size")
-	parser.add_option("--lp",dest="lp",type="int", metavar="INT",
-                help="Low pass filter for OTR volumes during particle centering alignment")
 	parser.add_option("--radius",dest="radius",type="int", metavar="INT",
                 help="Radius (pixels) for 3D reconstruction")
-        parser.add_option("-d", action="store_true",dest="debug",default=False,
+        parser.add_option("--filter",dest="filter",type="int", metavar="INT",default=0,
+                help="OPTIONAL: User specified low pass filter for OTR volumes during centering routine. Otherwise volumes are filtered to FSC=0.5")
+	parser.add_option("-d", action="store_true",dest="debug",default=False,
                 help="debug")
         options,args = parser.parse_args()
 
@@ -288,40 +286,106 @@ def writeSpiderEulerAngles(rotshifts,info,out,angle):
                 line = line + 1
 
 #=============================
-def recontruct_volume_and_refine(eulers,stack,numClasses,workingdir,debug,lp,apix,radius,rotShift):
+def recontruct_volume_and_refine(eulers,stack,numClasses,workingdir,debug,apix,radius,rotShift,lowpass):
 
 	#Loop over all classes
 	counter=1
 
 	while counter<=numClasses:
 
-		reconstruct(stack,'%s/selectFiles/sel%04d.spi' %(workingdir,counter),eulers,apix,lp)
-		
+		#Create file with resolution info for each volume
+        	os.makedirs('%s/selectFiles/sel%04d' %(workingdir,counter))        	
+
+		o1=open('%s/selectFiles/sel%04d/resolution' %(workingdir,counter),'a')
+
+		reconstruct(stack,'%s/selectFiles/sel%04d.spi' %(workingdir,counter),eulers)
+		fsc=calcFSC_filter('%s/selectFiles/sel%04d/vol001' %(workingdir,counter),'%s/selectFiles/sel%04d/vol1001' %(workingdir,counter),'%s/selectFiles/sel%04d/vol2001' %(workingdir,counter),apix/lowpass)
+
+		o1.write('%s\t%s\n' %('vol001_fq.spi',str(apix/float(fsc))))
+
 		volcounter=1
                 itermax=5
 
                 while volcounter<=itermax:
 			if volcounter==1:
-				refine3D('%s/selectFiles/sel%04d' %(workingdir,counter),eulers,'%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter),'%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter+1),radius,rotShift,stack,apix,lp)
+				refine3D('%s/selectFiles/sel%04d' %(workingdir,counter),eulers,'%s/selectFiles/sel%04d/vol%03d_fq' %(workingdir,counter,volcounter),'%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter+1),radius,rotShift,stack,apix)
+
+				fsc=calcFSC_filter('%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter+1),'%s/selectFiles/sel%04d/vol1%03d' %(workingdir,counter,volcounter+1),'%s/selectFiles/sel%04d/vol2%03d' %(workingdir,counter,volcounter+1),apix/lowpass)
+			
 			if volcounter>1:
-				refine3D('%s/selectFiles/sel%04d' %(workingdir,counter),eulers,'%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter),'%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter+1),radius,'blank',stack,apix,lp)
+				refine3D('%s/selectFiles/sel%04d' %(workingdir,counter),eulers,'%s/selectFiles/sel%04d/vol%03d_fq' %(workingdir,counter,volcounter),'%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter+1),radius,'blank',stack,apix)
+
+				fsc=calcFSC_filter('%s/selectFiles/sel%04d/vol%03d' %(workingdir,counter,volcounter+1),'%s/selectFiles/sel%04d/vol1%03d' %(workingdir,counter,volcounter+1),'%s/selectFiles/sel%04d/vol2%03d' %(workingdir,counter,volcounter+1),apix/lowpass)
+
+			o1.write('vol%03d_fq.spi\t%s\n' %(volcounter+1,str(apix/float(fsc))))
+
 			volcounter=volcounter+1
+
 		counter = counter +1
 
+#=============================
+def calcFSC_filter(vol,evenvol,oddvol,lowpass):
+
+	if lowpass == 1:
+
+		#Calculate FSC curve using SPIDER
+		spi='RF 3\n' 
+		spi+='%s\n' %(evenvol)
+		spi+='%s\n' %(oddvol)
+		spi+='(1.0)\n'
+		spi+='(0.5,1.5)\n'
+		spi+='C\n'
+		spi+='(90.0)\n'
+		spi+='(3.0)\n'
+		spi+='%s_dres\n' %(vol)
+		runSpider(spi)
+
+		res=findFSC_eq_to_pt5('%s_dres.spi' %(vol))
+
+	if lowpass < 0:
+
+		res=lowpass
+
+	#Filter volume
+	spi='FQ\n'
+	spi+='%s\n' %(vol)
+	spi+='%s_fq\n' %(vol)
+	spi+='(7)\n'
+	spi+='(%s),(%s)\n' %(float(res)-0.01,float(res)+0.01)
+	runSpider(spi)
+
+	return res
+	
+#===============================
+def findFSC_eq_to_pt5(dres):
+
+	resolution=0
+	f1 = open(dres,'r')
+
+	for line in f1: 
+
+		if line[1] == ';':
+			continue
+		#print line
+		freq=line.split()[2]
+		fsc=line.split()[4]
+		if float(fsc) < 0.5:
+			if resolution == 0:
+				resolution=freq
+				#print 'found freq ==> %f' %(float(freq))
+	return resolution	
+
 #==============================
-def refine3D(workingdir,eulers,inputvol,outputvol,radius,rotShift,stack,apix,lp):
+def refine3D(workingdir,eulers,inputvol,outputvol,radius,rotShift,stack,apix):
 
 	numParts=getNumberOfLines('%s.spi'% (workingdir))
 
-	lp1=(apix/lp)-0.025
-	lp2=(apix/lp)+0.025
-
 	spi='PJ 3Q\n'
-	spi+='%s_filt%03dA\n' %(inputvol,lp)
+	spi+='%s\n' %(inputvol)
 	spi+='%s\n' %(str(radius))
 	spi+='%s\n' %(workingdir)
 	spi+='%s\n' %(eulers[:-4])
-	spi+='%s_filt%03dA_proj@******\n' %(inputvol,lp)
+	spi+='%s_proj@******\n' %(inputvol)
 	spi+='do lb1 [part]=1,%s\n' %(str(numParts))
 	spi+='UD IC [part] [sel]\n' 
 	spi+='%s\n' %(workingdir)
@@ -334,11 +398,11 @@ def refine3D(workingdir,eulers,inputvol,outputvol,radius,rotShift,stack,apix,lp)
 		spi+='-[sx],-[sy]\n'
 	if rotShift == 'blank':
 		spi+='CP\n'
-		spi+='%s_parts_shifted@{*******[sel]}\n' %(inputvol)
+		spi+='%s_parts_shifted@{*******[sel]}\n' %(inputvol[:-3])
 		spi+='_5\n'
 	spi+='CC N\n'
 	spi+='_5\n'
-	spi+='%s_filt%03dA_proj@{******[sel]}\n' %(inputvol,lp)
+	spi+='%s_proj@{******[sel]}\n' %(inputvol)
 	spi+='_3\n'
 	spi+='PK [xi] [yi]\n'
 	spi+='_3\n'
@@ -354,46 +418,31 @@ def refine3D(workingdir,eulers,inputvol,outputvol,radius,rotShift,stack,apix,lp)
 		spi+='%s@{*******[sel]}\n' %(stack[:-4])
 		spi+='%s_parts_shifted@{*******[sel]}\n' %(outputvol)
 	if rotShift == 'blank':
-                spi+='%s_parts_shifted@{*******[sel]}\n' %(inputvol)
+                spi+='%s_parts_shifted@{*******[sel]}\n' %(inputvol[:-3])
 		spi+='%s_parts_shifted@{*******[sel]}\n' %(outputvol)
 	spi+='-[newx],-[newy]\n'
 	spi+='lb1\n'
-	spi+='BP 3F\n'
+	spi+='BP 32F\n'
 	spi+='%s_parts_shifted@*******\n' %(outputvol)
 	spi+='%s\n' %(workingdir)
 	spi+='%s\n' %(eulers[:-4])
 	spi+='*\n'
 	spi+='%s\n' %(outputvol)
-	spi+='FQ\n'
-	spi+='%s\n' %(outputvol)
-	spi+='%s_filt%03dA\n' %(outputvol,lp)
-	spi+='(7)\n'
-	spi+='%s,%s\n' %(str(lp1),str(lp2))
+	spi+='%s/vol1%s\n'%(outputvol[:(len(outputvol))-6],outputvol[(len(outputvol))-3:])
+	spi+='%s/vol2%s\n'%(outputvol[:(len(outputvol))-6],outputvol[(len(outputvol))-3:])
 	runSpider(spi)
 
 #==============================
-def reconstruct(stack,select,eulers,apix,lp):
+def reconstruct(stack,select,eulers):
 
-	lp1=(apix/lp)-0.025
-	lp2=(apix/lp)+0.025
-
-	if os.path.exists('%s' %(select[:-4])):
-		print 'directory exists %s' %(select[:-4])
-		shutil.rmtree('%s' %(select[:-4]))
-
-	os.makedirs('%s' %(select[:-4]))
-
-	spi='BP 3F\n'
+	spi='BP 32F\n'
 	spi+='%s@*********\n' %(stack[:-4])
 	spi+='%s\n' %(select[:-4])
 	spi+='%s\n' %(eulers[:-4])
 	spi+='*\n'
 	spi+='%s/vol001\n' %(select[:-4])
-        spi+='FQ\n'
-	spi+='%s/vol001\n' %(select[:-4])
-	spi+='%s/vol001_filt%03dA\n' %(select[:-4],lp)
-	spi+='(7)\n'
-	spi+='%s,%s\n' %(str(lp1),str(lp2))
+	spi+='%s/vol1001\n' %(select[:-4])
+	spi+='%s/vol2001\n' %(select[:-4])
 	runSpider(spi)
 
 #===========================
@@ -489,4 +538,10 @@ if __name__ == "__main__":
 	writeSpiderEulerAngles('%s/rot_shifts.plt' %(params['folder']),params['info'],'%s/euler_angles.spi' %(params['folder']),params['angle'])
 	
 	#Reconstruct and refine 3D volumes
-	recontruct_volume_and_refine('%s/euler_angles.spi' %(params['folder']),'%s/tiltMateStack.spi' %(params['folder']),numClasses,params['folder'],params['debug'],params['lp'],params['apix'],params['radius'],'%s/rot_shifts' %(params['folder']))
+	
+	if params['filter'] == 0: 
+		lowpass=params['apix']
+
+	if params['filter'] > 0: 
+		lowpass=params['filter']	
+	recontruct_volume_and_refine('%s/euler_angles.spi' %(params['folder']),'%s/tiltMateStack.spi' %(params['folder']),numClasses,params['folder'],params['debug'],params['apix'],params['radius'],'%s/rot_shifts' %(params['folder']),lowpass)
