@@ -27,6 +27,8 @@ def setupParserOptions():
                 help="Radius (pixels) for 3D reconstruction")
         parser.add_option("--filter",dest="filter",type="int", metavar="INT",default=0,
                 help="OPTIONAL: User specified low pass filter for OTR volumes during centering routine. Otherwise volumes are filtered to FSC=0.5")
+	parser.add_option("--continue", action="store_true",dest="cont",default=False,
+                help="Flag if folder & tilt stack already exist.")
 	parser.add_option("-d", action="store_true",dest="debug",default=False,
                 help="debug")
         options,args = parser.parse_args()
@@ -45,9 +47,13 @@ def setupParserOptions():
 
 #=============================
 def checkConflicts(params):
-        if os.path.exists(params['folder']):
-                print "\nError: Output folder %s already exists. Exiting." %(params['folder'])
-                sys.exit()
+        if not params['folder']: 
+		print "\nError: No output folder specified. Exiting.\n"
+		sys.exit()
+	if params['cont'] is False:
+		if os.path.exists(params['folder']):
+                	print "\nError: Output folder %s already exists. Exiting." %(params['folder'])
+                	sys.exit()
 	if not os.path.exists(params['stack']):
 		print "\nError: Input stack %s does not exist. Exiting." %(params['stack'])
 		sys.exit()
@@ -325,9 +331,9 @@ def recontruct_volume_and_refine(eulers,stack,numClasses,workingdir,debug,apix,r
 
 #=============================
 def calcFSC_filter(vol,evenvol,oddvol,lowpass):
-
-	if lowpass == 1:
-
+	print 'CalcFSC lowpass=%s' %(str(lowpass))
+	if float(lowpass) == 1:
+		print 'Lowpass is equal to 1'
 		#Calculate FSC curve using SPIDER
 		spi='RF 3\n' 
 		spi+='%s\n' %(evenvol)
@@ -342,8 +348,8 @@ def calcFSC_filter(vol,evenvol,oddvol,lowpass):
 
 		res=findFSC_eq_to_pt5('%s_dres.spi' %(vol))
 
-	if lowpass < 0:
-
+	if float(lowpass) < 1:
+		print 'Low pass < 1'
 		res=lowpass
 
 	#Filter volume
@@ -505,8 +511,15 @@ if __name__ == "__main__":
         checkConflicts(params)
 	
 	#Create output directory
-	os.mkdir(params['folder'])
+	if params['cont'] is False:
+		os.mkdir(params['folder'])
 	
+	if params['cont'] is True:
+		cmd='rm -r %s/euler_angles.spi  %s/membership.plt  %s/rot_shifts.plt  %s/rot_shifts.spi  %s/selectFiles' %(params['folder'],params['folder'],params['folder'],params['folder'],params['folder'],)
+		if params['debug'] is True:
+			print cmd
+		subprocess.Popen(cmd,shell=True).wait()
+
 	#Get rotation and shifts from Imagic header
 	getRotShifts(params['stack'],'%s/rot_shifts.plt' %(params['folder']),imagicdir,params['debug'])
 	getMembershipPerClass(params['stack'],'%s/membership.plt' %(params['folder']),imagicdir,params['debug'])
@@ -521,15 +534,16 @@ if __name__ == "__main__":
 	writeSpiderEulerAngles('%s/rot_shifts.plt' %(params['folder']),params['info'],'%s/euler_angles.spi' %(params['folder']),params['angle'])
 
 	#Create a new spider stack with the 'untilted' and 'tilted' particles in alternative positions for the reconstruction
-	cmd = 'e2proc2d.py %s %s/tiltMateStack.spi --first=%s --last=%s --outtype spi' %(params['stack'],params['folder'],str(getNumberOfLines(params['info'])/2),str(getNumberOfLines(params['info'])-1)) 
-	if params['debug'] is True:
-		print cmd
-	subprocess.Popen(cmd,shell=True).wait()
+	if params['cont'] is False:
+		cmd = 'e2proc2d.py %s %s/tiltMateStack.spi --first=%s --last=%s --outtype spi' %(params['stack'],params['folder'],str(getNumberOfLines(params['info'])/2),str(getNumberOfLines(params['info'])-1)) 
+		if params['debug'] is True:
+			print cmd
+		subprocess.Popen(cmd,shell=True).wait()
 
-	cmd = 'e2proc2d.py %s %s/tiltMateStack.spi --first=0 --last=%s --outtype spi' %(params['stack'],params['folder'],str((getNumberOfLines(params['info'])/2)-1))   
-        if params['debug'] is True:
-                print cmd
-        subprocess.Popen(cmd,shell=True).wait()
+		cmd = 'e2proc2d.py %s %s/tiltMateStack.spi --first=0 --last=%s --outtype spi' %(params['stack'],params['folder'],str((getNumberOfLines(params['info'])/2)-1))   
+        	if params['debug'] is True:
+                	print cmd
+        	subprocess.Popen(cmd,shell=True).wait()
 
 	#Convert rotatation and shift file to spider format
 	convertPLT_to_SPI('%s/rot_shifts.plt' %(params['folder']))
