@@ -24,7 +24,7 @@ def setupParserOptions():
 	parser.add_option("--boxsize",dest="boxsize",type="int", metavar="INT",
                 help="Boxsize of particles and 3D model")
 	parser.add_option("-v",dest="vol",type="string",metavar="FILE",
-                help="3D volume to be aligned to 2D averages (.mrc or .spi format)")
+                help="3D volume to be aligned to 2D averages (.mrc, .mrcs, or .spi format)")
         parser.add_option("--angstep",dest="angstep",type="int", metavar="INT",default=10,
                 help="Angular step for projecting 3D model (Default=10 degrees)")
 	parser.add_option("-d", action="store_true",dest="debug",default=False,
@@ -52,8 +52,10 @@ def checkConflicts(params):
                 sys.exit()
         if params['stack'][-4:] != '.img':
         	if params['stack'][-4:] != '.hed':
-                	print 'Stack extension %s is not recognized as .hed or .img file' %(params['stack'][-4:])
-                        sys.exit()
+			if params['stack'][-4:] != '.mrc':
+				if params['stack'][-4:] != '.mrcs':
+                			print 'Stack extension %s is not recognized as .mrc, .mrcs, .hed, or .img' %(params['stack'][-4:])
+                        		sys.exit()
 
 	if not os.path.exists(params['vol']):
 		print 'Error: input volume does not exist.'
