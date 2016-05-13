@@ -94,7 +94,7 @@ def alignVols(params,numFolders):
 	if os.path.exists(angleout):
 		os.remove(angleout)
 	angleoutappend=open(angleout,'a')
-	angleoutappend.write('1\t3\t0\t90\t0\n')
+	angleoutappend.write('1\t3\t0\t0\t0\n')
 	angleoutappend.close()
 	
 	#selectFiles/sel0001/vol006_fq.spi

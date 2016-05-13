@@ -1,10 +1,5 @@
 ;This script will filter a SPIDER stack using butterworth filter for low pass filter
 
-;To run:
-;spider spi @lowpass_filter_stack
-
-; TEM|pro - mcianfrocco
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 FR

@@ -194,7 +194,8 @@ def runSpider(lines):
 def calc_prob(params,numFolders,outfile):
 
 	#Create histogram bins:
-	currentAngle=0-float(params['angularbin'])/2	
+	#currentAngle=0-float(params['angularbin'])/2	
+	currentAngle=0
 	bins=[]
 	while currentAngle<360+float(params['angularbin']):
 		bins.append(currentAngle)
