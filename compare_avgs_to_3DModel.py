@@ -18,13 +18,13 @@ def setupParserOptions():
         parser = optparse.OptionParser()
         parser.set_usage("%prog -i <stack.img> --num=[number of class averages] --boxsize=[boxsize of data] -v <volume>")
         parser.add_option("-i",dest="stack",type="string",metavar="FILE",
-                help="Stack of 2D class averages in .img format.")
+                help="Stack of 2D class averages in .mrc, .mrcs, or .img format.")
         parser.add_option("--num",dest="numParts",type="int", metavar="INT",
                 help="Number of class averages")
 	parser.add_option("--boxsize",dest="boxsize",type="int", metavar="INT",
                 help="Boxsize of particles and 3D model")
 	parser.add_option("-v",dest="vol",type="string",metavar="FILE",
-                help="3D volume to be aligned to 2D averages (.mrc, .mrcs, or .spi format)")
+                help="3D volume to be aligned to 2D averages (.mrc or .spi format)")
         parser.add_option("--angstep",dest="angstep",type="int", metavar="INT",default=10,
                 help="Angular step for projecting 3D model (Default=10 degrees)")
 	parser.add_option("-d", action="store_true",dest="debug",default=False,
